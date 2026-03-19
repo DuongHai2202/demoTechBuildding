@@ -1,0 +1,182 @@
+// ---------------------------------------------------------
+// DATABASE SCHEMA THIẾT KẾ CHI TIẾT (ERD v3 - RBAC ENHANCED)
+// Áp dụng mô hình phân quyền từ ứng dụng mẫu
+// ---------------------------------------------------------
+
+// --- 1. NHÓM PHÂN QUYỀN & BẢO MẬT (AUTH & SECURITY) ---
+Table roles {
+  id int [pk, increment]
+  name varchar(50) [unique, not null]
+  description text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table permissions {
+  id int [pk, increment]
+  name varchar(50) [unique, not null, note: 'Ví dụ: USER_CREATE, PROJECT_EDIT...']
+  description text
+  created_at timestamp [default: `now()`]
+}
+
+Table role_has_permissions {
+  role_id int [ref: > roles.id]
+  permission_id int [ref: > permissions.id]
+  primary key (role_id, permission_id)
+}
+
+Table users {
+  id int [pk, increment]
+  username varchar(50) [unique, not null]
+  password_hash varchar(255) [not null]
+  full_name varchar(100)
+  phone varchar(15) [unique]
+  email varchar(100) [unique]
+  device_id varchar(100) [note: 'Khóa định danh thiết bị Mobile']
+  avatar_url varchar(255)
+  status varchar(20) [default: 'ACTIVE', note: 'ACTIVE, INACTIVE, LOCKED']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+  is_deleted boolean [default: false]
+}
+
+Table user_has_roles {
+  user_id int [ref: > users.id]
+  role_id int [ref: > roles.id]
+  primary key (user_id, role_id)
+}
+
+Table refresh_tokens {
+  id bigint [pk, increment]
+  token varchar(255) [unique, not null]
+  user_id int [ref: > users.id]
+  expiry_date timestamp [not null]
+  created_at timestamp [default: `now()`]
+}
+
+Table blacklisted_tokens {
+  id bigint [pk, increment]
+  token varchar(500) [unique, not null]
+  expiry_date timestamp [not null]
+  created_at timestamp [default: `now()`]
+}
+
+Table otp_codes {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  code varchar(6) [not null]
+  type varchar(20) [note: 'VERIFY_ACCOUNT, RESET_PASSWORD']
+  is_used boolean [default: false]
+  expired_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+// --- 2. NHÓM DỰ ÁN (PROJECTS) ---
+Table projects {
+  id int [pk, increment]
+  name varchar(255) [not null]
+  description text
+  address varchar(500)
+  latitude decimal(10,8)
+  longitude decimal(11,8)
+  radius_meters int [default: 100]
+  start_date date
+  end_date date
+  status varchar(20) [default: 'PLANNING']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table project_members {
+  id int [pk, increment]
+  project_id int [ref: > projects.id]
+  user_id int [ref: > users.id]
+  assigned_role varchar(50)
+  is_active boolean [default: true]
+  joined_at timestamp [default: `now()`]
+  
+  indexes {
+    (project_id, user_id) [unique]
+  }
+}
+
+// --- 3. NHÓM CHẤM CÔNG & NĂNG SUẤT (ATTENDANCE) ---
+Table attendance_logs {
+  id bigint [pk, increment]
+  user_id int [ref: > users.id]
+  project_id int [ref: > projects.id]
+  check_in_at timestamp
+  check_out_at timestamp
+  gps_lat_in decimal(10,8)
+  gps_long_in decimal(11,8)
+  gps_lat_out decimal(10,8)
+  gps_long_out decimal(11,8)
+  distance_in_meters float
+  selfie_url_in varchar(255)
+  selfie_url_out varchar(255)
+  status varchar(20) [note: 'VALID, INVALID, PENDING']
+  created_at timestamp [default: `now()`]
+}
+
+// --- 4. NHÓM NHẬT KÝ & HIỆN TRƯỜNG (SITE LOGS) ---
+Table work_logs {
+  id bigint [pk, increment]
+  project_id int [ref: > projects.id]
+  user_id int [ref: > users.id]
+  log_date date [not null]
+  weather_condition varchar(100)
+  worker_count int [default: 0]
+  content text
+  status varchar(20) [default: 'DRAFT']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table media_attachments {
+  id bigint [pk, increment]
+  log_id bigint [ref: > work_logs.id]
+  file_url varchar(255) [not null]
+  file_type varchar(20) [note: 'IMAGE, AUDIO, VIDEO']
+  created_at timestamp [default: `now()`]
+}
+
+// --- 5. NHÓM VẬT TƯ & KHO (PROCUREMENT) ---
+Table materials {
+  id int [pk, increment]
+  name varchar(255) [not null]
+  unit varchar(20)
+  created_at timestamp [default: `now()`]
+}
+
+Table material_requests {
+  id int [pk, increment]
+  project_id int [ref: > projects.id]
+  requester_id int [ref: > users.id]
+  material_id int [ref: > materials.id]
+  requested_quantity float
+  status varchar(20) [default: 'PENDING']
+  created_at timestamp [default: `now()`]
+}
+
+// --- 6. NHÓM HỢP ĐỒNG (CONTRACTS) ---
+Table contracts {
+  id int [pk, increment]
+  project_id int [ref: > projects.id]
+  contract_number varchar(100) [unique]
+  contract_name varchar(255)
+  partner_name varchar(255)
+  contract_value decimal(18,2)
+  status varchar(20) [default: 'ACTIVE']
+  created_at timestamp [default: `now()`]
+}
+
+Table boq_items {
+  id int [pk, increment]
+  contract_id int [ref: > contracts.id]
+  item_code varchar(50)
+  description text
+  unit varchar(20)
+  quantity float
+  unit_price decimal(18,2)
+  total_price decimal(18,2)
+}

@@ -1,0 +1,28 @@
+# Root .gitignore for TechBuildding (Frontend + Backend)
+
+# Frontend specific
+Frontend/node_modules/
+Frontend/dist/
+Frontend/dist-ssr/
+Frontend/.vscode/
+Frontend/.idea/
+Frontend/*.local
+
+# Backend specific (Java/Spring Boot)
+Backend/demoTechBuildding/target/
+Backend/demoTechBuildding/.mvn/wrapper/maven-wrapper.jar
+Backend/demoTechBuildding/.apt_generated
+Backend/demoTechBuildding/.classpath
+Backend/demoTechBuildding/.factorypath
+Backend/demoTechBuildding/.project
+Backend/demoTechBuildding/.settings
+Backend/demoTechBuildding/build/
+Backend/demoTechBuildding/mysql_data/
+
+# Global/Editor
+.idea/
+.vscode/
+*.log
+.DS_Store
+*.swp
+.env
