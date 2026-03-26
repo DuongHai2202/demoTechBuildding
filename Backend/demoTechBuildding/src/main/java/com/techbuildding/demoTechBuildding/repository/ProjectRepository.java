@@ -10,4 +10,5 @@ import java.util.List;
 public interface ProjectRepository extends JpaRepository<Project, Integer> {
 
     List<Project> findByStatus(String status);
+    boolean existsByProjectCode(String projectCode);
 }

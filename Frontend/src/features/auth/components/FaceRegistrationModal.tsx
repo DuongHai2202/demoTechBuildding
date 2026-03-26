@@ -77,9 +77,10 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
       setTimeout(() => {
         onComplete();
       }, 1500);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setStatus('Lưu thất bại. Thử lại sau.');
+      const errorMsg = e.response?.data?.message || 'Lưu thất bại. Thử lại sau.';
+      setStatus(errorMsg);
       setIsScanning(false);
     }
   };

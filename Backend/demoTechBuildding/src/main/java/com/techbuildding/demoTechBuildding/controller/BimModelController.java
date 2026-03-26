@@ -7,11 +7,13 @@ import com.techbuildding.demoTechBuildding.service.BimModelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/bim-models")
 @RequiredArgsConstructor
@@ -24,7 +26,12 @@ public class BimModelController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseData<BimModelResponseDTO> createModel(@RequestBody BimModelRequestDTO request) {
-        return new ResponseData<>(HttpStatus.CREATED.value(), "BIM model created successfully", bimModelService.createModel(request));
+        log.info("Create a new BIM model");
+        try {
+            return new ResponseData<>(HttpStatus.CREATED.value(), "BIM model created successfully", bimModelService.createModel(request));
+        } catch (Exception e) {
+            return new ResponseData<>(HttpStatus.BAD_REQUEST.value(), e.getMessage());
+        }
     }
 
     @Operation(summary = "Get BIM models", description = "Retrieve all BIM models for a project, optionally filtered by zone")

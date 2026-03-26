@@ -223,7 +223,7 @@ const MaterialManagementPage: React.FC = () => {
           <h1 className="text-3xl font-extrabold text-[var(--color-text-primary)] tracking-tight text-gradient bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
             Quản Lý Vật Tư & Thiết Bị
           </h1>
-          <p className="text-[var(--color-text-muted)] mt-1 font-semibold">
+          <p className="text-[var(--color-text-muted)] mt-1 font-black uppercase tracking-widest text-[10px] opacity-70">
             Tổng hợp yêu cầu vật tư (MR) từ tất cả các dự án trong hệ thống.
           </p>
         </div>
@@ -273,7 +273,7 @@ const MaterialManagementPage: React.FC = () => {
       {/* Main Table Card */}
       <div className="bg-[var(--color-surface)] rounded-2xl shadow-[var(--shadow-card-theme)] border border-[var(--color-border)] overflow-hidden transition-all duration-300">
         <div className="p-6 border-b border-[var(--color-border)] flex items-center justify-between bg-white dark:bg-[var(--color-surface)]">
-          <h2 className="font-bold flex items-center gap-2 text-[var(--color-text-primary)] text-lg">
+          <h2 className="font-black flex items-center gap-2 text-[var(--color-text-primary)] text-lg uppercase tracking-tight">
             <ShoppingBagIcon className="w-5 h-5 text-[var(--color-primary)]" />
             Danh sách tất cả yêu cầu vật tư
           </h2>

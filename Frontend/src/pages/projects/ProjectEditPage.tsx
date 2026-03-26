@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useProject, useUpdateProject } from '../../features/projects/api/projectApi';
 import { ProjectForm } from '../../features/projects/components/ProjectForm';
 import type { ProjectFormData } from '../../features/projects/types/project.schemas';
@@ -28,12 +29,16 @@ export default function ProjectEditPage() {
   }
 
   const handleSubmit = async (data: ProjectFormData) => {
-    try {
-      await updateMutation.mutateAsync(data);
-      navigate(`/projects/${projectId}`);
-    } catch (error) {
-      console.error('Update failed:', error);
-    }
+    updateMutation.mutate(data, {
+      onSuccess: () => {
+        toast.success('Dự án đã được cập nhật thành công!');
+        navigate(`/projects/${projectId}`);
+      },
+      onError: (error: any) => {
+        const message = error?.response?.data?.message || 'Có lỗi xảy ra khi cập nhật dự án';
+        toast.error(message);
+      }
+    });
   };
 
   return (

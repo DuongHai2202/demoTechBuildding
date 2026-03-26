@@ -170,7 +170,7 @@ export default function PartnersPage() {
             placeholder="Tìm kiếm theo tên, mã hoặc MST..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] py-2 pl-10 pr-4 text-sm outline-none focus:border-[var(--color-primary)] transition-colors"
+            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-4 focus:ring-[var(--color-primary)]/10 focus:border-[var(--color-primary)] transition-all"
           />
         </div>
       )}
@@ -179,7 +179,7 @@ export default function PartnersPage() {
       {showForm && (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg overflow-hidden transition-all animate-in fade-in slide-in-from-top-4 duration-300 mb-6">
           <div className="bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] px-6 py-4">
-            <h3 className="text-sm font-bold text-[var(--color-text-primary)] uppercase tracking-wider">
+            <h3 className="text-sm font-black text-[var(--color-text-primary)] uppercase tracking-widest">
               {editingId ? 'Cập nhật đối tác' : 'Thêm đối tác mới'}
             </h3>
           </div>
@@ -188,10 +188,10 @@ export default function PartnersPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {/* Basic Info */}
               <div className="space-y-4">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] border-b pb-2">Thông tin cơ bản</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] border-b pb-2">Thông tin cơ bản</h4>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Tên đối tác *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Tên đối tác *</label>
                     <input
                       placeholder="Tên đối tác"
                       value={form.name}
@@ -224,10 +224,10 @@ export default function PartnersPage() {
 
               {/* Contact Info */}
               <div className="space-y-4">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] border-b pb-2">Thông tin liên hệ</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] border-b pb-2">Thông tin liên hệ</h4>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Người liên hệ</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Người liên hệ</label>
                     <div className="relative">
                       <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--color-text-muted)]" />
                       <input
@@ -239,7 +239,7 @@ export default function PartnersPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Số điện thoại</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Số điện thoại</label>
                     <div className="relative">
                       <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--color-text-muted)]" />
                       <input
@@ -255,11 +255,11 @@ export default function PartnersPage() {
 
               {/* Entity Selection */}
               <div className="space-y-4">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] border-b pb-2">Phân loại & Trạng thái</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] border-b pb-2">Phân loại & Trạng thái</h4>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Loại đối tác</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Loại đối tác</label>
                       <select
                         value={form.type}
                         onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
@@ -272,7 +272,7 @@ export default function PartnersPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Trạng thái</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Trạng thái</label>
                       <select
                         value={form.status}
                         onChange={e => setForm(f => ({ ...f, status: e.target.value as any }))}
@@ -284,7 +284,7 @@ export default function PartnersPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Email công ty</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Email công ty</label>
                     <div className="relative">
                       <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--color-text-muted)]" />
                       <input
@@ -302,7 +302,7 @@ export default function PartnersPage() {
             {/* Row 2: Address & Profile */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 pt-4 border-t border-[var(--color-border)] border-dashed">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Địa chỉ trụ sở</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Địa chỉ trụ sở</label>
                 <div className="relative">
                   <MapPinIcon className="absolute left-3 top-2.5 size-4 text-[var(--color-text-muted)]" />
                   <textarea
@@ -315,7 +315,7 @@ export default function PartnersPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Hồ sơ năng lực / Ghi chú</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Hồ sơ năng lực / Ghi chú</label>
                 <div className="relative">
                   <DocumentTextIcon className="absolute left-3 top-2.5 size-4 text-[var(--color-text-muted)]" />
                   <textarea
@@ -332,7 +332,7 @@ export default function PartnersPage() {
             {/* Row 3: Dynamic Unit Price Table */}
             <div className="space-y-4 pt-4 border-t border-[var(--color-border)] border-dashed">
               <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)]">Bảng đơn giá định mức</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)]">Bảng đơn giá định mức</h4>
                 <button
                   type="button"
                   onClick={addPriceRow}
@@ -348,8 +348,8 @@ export default function PartnersPage() {
                   <table className="w-full text-left text-xs">
                     <thead className="bg-[var(--color-surface-alt)] border-b border-[var(--color-border)]">
                       <tr>
-                        <th className="px-4 py-2 font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tên hạng mục / Vật tư</th>
-                        <th className="px-4 py-2 font-bold uppercase tracking-wider text-[var(--color-text-muted)] w-48">Đơn giá định mức</th>
+                        <th className="px-4 py-2 font-black uppercase tracking-widest text-[var(--color-text-disabled)] text-[9px]">Tên hạng mục / Vật tư</th>
+                        <th className="px-4 py-2 font-black uppercase tracking-widest text-[var(--color-text-disabled)] text-[9px] w-48">Đơn giá định mức</th>
                         <th className="px-4 py-2 w-16"></th>
                       </tr>
                     </thead>
@@ -426,11 +426,11 @@ export default function PartnersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[var(--color-surface-alt)]/50 border-b border-[var(--color-border)]">
-                <th className="px-6 py-5 text-left font-black text-[var(--color-text-secondary)] uppercase tracking-widest text-[10px]">Đối tác</th>
-                <th className="px-6 py-5 text-left font-black text-[var(--color-text-secondary)] uppercase tracking-widest text-[10px]">Liên hệ</th>
-                <th className="px-6 py-5 text-left font-black text-[var(--color-text-secondary)] uppercase tracking-widest text-[10px]">Mã / MST</th>
-                <th className="px-6 py-5 text-left font-black text-[var(--color-text-secondary)] uppercase tracking-widest text-[10px]">Loại / Trạng thái</th>
-                <th className="px-6 py-5 text-right font-black text-[var(--color-text-secondary)] uppercase tracking-widest text-[10px]">Tác vụ</th>
+                <th className="px-6 py-5 text-left font-black text-[var(--color-text-disabled)] uppercase tracking-widest text-[10px]">Đối tác</th>
+                <th className="px-6 py-5 text-left font-black text-[var(--color-text-disabled)] uppercase tracking-widest text-[10px]">Liên hệ</th>
+                <th className="px-6 py-5 text-left font-black text-[var(--color-text-disabled)] uppercase tracking-widest text-[10px]">Mã / MST</th>
+                <th className="px-6 py-5 text-left font-black text-[var(--color-text-disabled)] uppercase tracking-widest text-[10px]">Loại / Trạng thái</th>
+                <th className="px-6 py-5 text-right font-black text-[var(--color-text-disabled)] uppercase tracking-widest text-[10px]">Tác vụ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">

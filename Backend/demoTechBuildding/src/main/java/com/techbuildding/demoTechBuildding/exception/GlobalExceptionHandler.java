@@ -2,6 +2,7 @@ package com.techbuildding.demoTechBuildding.exception;
 
 import com.techbuildding.demoTechBuildding.dto.response.ResponseError;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -51,6 +52,19 @@ public class GlobalExceptionHandler {
     public ResponseError handleUsernameNotFoundException(UsernameNotFoundException e) {
         log.warn("User not found: {}", e.getMessage());
         return new ResponseError(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
+    }
+
+    /**
+     * Handle duplicate resource or data integrity violations (e.g., unique constraints).
+     */
+    @ExceptionHandler({DuplicateResourceException.class, DataIntegrityViolationException.class})
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ResponseError handleDuplicateResourceException(Exception e) {
+        String message = e instanceof DuplicateResourceException 
+                ? e.getMessage() 
+                : "Dữ liệu đã tồn tại hoặc vi phạm ràng buộc hệ thống.";
+        log.warn("Data conflict: {}", message);
+        return new ResponseError(HttpStatus.CONFLICT.value(), message);
     }
 
     /**

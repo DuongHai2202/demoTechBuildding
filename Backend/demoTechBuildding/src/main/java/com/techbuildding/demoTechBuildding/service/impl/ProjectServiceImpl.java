@@ -5,6 +5,7 @@ import com.techbuildding.demoTechBuildding.dto.request.project.ProjectRequestDTO
 import com.techbuildding.demoTechBuildding.dto.response.project.ProjectMemberResponseDTO;
 import com.techbuildding.demoTechBuildding.dto.response.project.ProjectResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.*;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
 import com.techbuildding.demoTechBuildding.mapper.ProjectMapper;
 import com.techbuildding.demoTechBuildding.repository.*;
 import com.techbuildding.demoTechBuildding.service.ProjectService;
@@ -48,6 +49,10 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public ProjectResponseDTO createProject(ProjectRequestDTO request) {
         log.info("Creating project: {}", request.getName());
+
+        if (request.getProjectCode() != null && projectRepository.existsByProjectCode(request.getProjectCode())) {
+            throw new DuplicateResourceException("Mã dự án '" + request.getProjectCode() + "' đã tồn tại trong hệ thống.");
+        }
 
         Project project = projectMapper.toEntity(request);
         if (project.getStatus() == null) {

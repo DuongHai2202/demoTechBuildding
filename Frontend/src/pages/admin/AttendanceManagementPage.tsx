@@ -125,19 +125,23 @@ export default function AttendanceManagementPage() {
             <span className="text-sm font-bold text-[var(--color-text-primary)]">{selectedProject?.name}</span>
           </div>
 
-          <div className="bg-gradient-to-r from-[var(--color-primary)] to-blue-600 p-4 rounded-xl text-white shadow-lg flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <BuildingOffice2Icon className="size-5" />
+          <div className="bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dark,var(--color-primary))] p-6 rounded-2xl text-white shadow-[var(--shadow-modal-theme)] border border-white/10 flex items-center justify-between relative overflow-hidden group">
+            {/* Decorative background element */}
+            <div className="absolute -right-10 -top-10 size-40 bg-white/10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-700" />
+            
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="p-3 bg-white/20 backdrop-blur-md rounded-xl border border-white/20 shadow-inner">
+                <BuildingOffice2Icon className="size-6 text-white" />
               </div>
               <div>
-                <span className="block text-[10px] uppercase font-bold opacity-80 tracking-widest">Đang xem nhật ký từ dự án</span>
-                <span className="font-bold text-lg">{selectedProject?.name}</span>
+                <span className="block text-[10px] uppercase font-black opacity-70 tracking-[0.2em] mb-0.5">Đang xem nhật ký từ dự án</span>
+                <h2 className="font-black text-xl tracking-tight">{selectedProject?.name}</h2>
               </div>
             </div>
-            <div className="text-right">
-              <span className="block text-[10px] uppercase font-bold opacity-80 tracking-widest">Mã dự án</span>
-              <span className="font-mono text-xl font-black">{selectedProject?.projectCode || 'N/A'}</span>
+            
+            <div className="text-right relative z-10">
+              <span className="block text-[10px] uppercase font-black opacity-70 tracking-[0.2em] mb-0.5">Mã dự án</span>
+              <span className="font-mono text-2xl font-black tracking-tighter text-white drop-shadow-sm">{selectedProject?.projectCode || 'N/A'}</span>
             </div>
           </div>
 

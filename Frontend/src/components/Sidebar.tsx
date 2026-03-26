@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { to: '/users', label: 'Nhân sự' },
       { to: '/approval-requests', label: 'Phê duyệt quyền' },
-      { to: '/attendance', label: 'Chấm công (Của tôi)' },
+      { to: '/attendance', label: 'Chấm công' },
       { to: '/admin/attendance', label: 'Quản lý Chấm công' },
     ],
   },
@@ -82,7 +82,7 @@ export function Sidebar() {
               <circle cx="50" cy="50" r="45" stroke="currentColor" strokeWidth="2" opacity="0.2" />
             </svg>
           </div>
-          <h1 className="text-2xl font-black tracking-widest text-[var(--color-primary)]">TECHBUILDER</h1>
+          <h1 className="text-2xl font-black tracking-widest text-[var(--color-primary)] uppercase">TechBuilding</h1>
         </div>
       </div>
 

@@ -10,6 +10,9 @@ import com.techbuildding.demoTechBuildding.repository.UserHasRoleRepository;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.service.UserService;
 import com.techbuildding.demoTechBuildding.util.enums.UserStatus;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,6 +32,7 @@ public class UserServiceImpl implements UserService {
     private final com.techbuildding.demoTechBuildding.repository.PartnerRepository partnerRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -171,9 +175,49 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found: " + username));
 
+        // Duplicate Check Logic
+        if (faceDescriptor != null && !faceDescriptor.isBlank()) {
+            try {
+                double[] newDescriptor = objectMapper.readValue(faceDescriptor, double[].class);
+                List<User> others = userRepository.findAllByFaceDescriptorIsNotNull();
+                
+                for (User other : others) {
+                    // Skip if the same user is re-registering
+                    if (other.getId().equals(user.getId())) continue;
+                    
+                    if (other.getFaceDescriptor() != null) {
+                        double[] existingDescriptor = objectMapper.readValue(other.getFaceDescriptor(), double[].class);
+                        double distance = calculateEuclideanDistance(newDescriptor, existingDescriptor);
+                        
+                        log.debug("Face similarity check: distance = {} between {} and {}", distance, user.getUsername(), other.getUsername());
+                        
+                        // Threshold 0.6 is standard for face-api.js. Smaller means more similar.
+                        if (distance < 0.6) {
+                            log.warn("Duplicate face detected: User {} is too similar to {}", user.getUsername(), other.getUsername());
+                            throw new DuplicateResourceException("Khuôn mặt này đã được đăng ký bởi nhân viên khác (" + other.getFullName() + ")");
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                if (e instanceof DuplicateResourceException) throw (DuplicateResourceException) e;
+                log.error("Error parsing face descriptor for duplicate check", e);
+                // If it's just a parse error (bad data), we might want to let it through or fail, 
+                // but let's just log and continue for now or wrap in RuntimeException
+            }
+        }
+
         user.setFaceDescriptor(faceDescriptor);
         userRepository.save(user);
 
         return userMapper.toResponseDTO(user);
+    }
+
+    private double calculateEuclideanDistance(double[] v1, double[] v2) {
+        if (v1.length != v2.length) return 1.0; // Max distance
+        double sum = 0;
+        for (int i = 0; i < v1.length; i++) {
+            sum += Math.pow(v1[i] - v2[i], 2);
+        }
+        return Math.sqrt(sum);
     }
 }

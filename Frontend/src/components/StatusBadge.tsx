@@ -19,6 +19,7 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   REJECTED: { label: 'Từ chối', variant: 'danger' },
   // Attendance
   CHECKED_IN: { label: 'Đang làm việc', variant: 'info' },
+  FAILED: { label: 'Thất bại', variant: 'danger' },
   // General
   ACTIVE: { label: 'Đang hoạt động', variant: 'success' },
   INACTIVE: { label: 'Tạm ngưng', variant: 'danger' },

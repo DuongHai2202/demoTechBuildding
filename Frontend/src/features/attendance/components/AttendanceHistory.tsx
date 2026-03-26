@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjectHistory, usePersonalHistory, exportAttendanceExcel } from '../api/attendanceApi';
 import { DataTable } from '../../../components/ui/DataTable';
 import { Button } from '../../../components/ui/Button';
@@ -12,8 +12,22 @@ export function AttendanceHistory() {
   const user = useAuthStore((s) => s.user);
   const [viewType, setViewType] = useState<'personal' | 'project'>('personal');
   const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
+  
+  const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(currentDate);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const liveDate = new Date().toISOString().split('T')[0];
+      if (liveDate !== currentDate) {
+        setCurrentDate(liveDate);
+        // If endDate was "today", advance it
+        if (endDate === currentDate) setEndDate(liveDate);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [currentDate, endDate]);
 
   const { data: projects } = useProjects();
   
@@ -61,27 +75,19 @@ export function AttendanceHistory() {
     {
       key: 'status',
       header: 'Trạng thái',
-      render: (v: any) => {
-        const statusMap: Record<string, { label: string; variant: 'success' | 'info' | 'warning' | 'danger' }> = {
-          'CHECKED_IN': { label: 'Đang làm việc', variant: 'info' },
-          'COMPLETED': { label: 'Hoàn thành', variant: 'success' },
-          'IN_PROJECT': { label: 'Trong dự án', variant: 'success' },
-        };
-        const config = statusMap[v.status] || { label: v.status, variant: 'warning' };
-        return <StatusBadge label={config.label} variant={config.variant} />;
-      }
+      render: (v: any) => <StatusBadge status={v.status} />
     }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 border-b border-[var(--color-border)] pb-2">
+      <div className="flex items-center gap-2 p-1 bg-[var(--color-surface-alt)] rounded-xl w-fit border border-[var(--color-border)]">
         <button
           onClick={() => setViewType('personal')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors rounded-lg ${
+          className={`flex items-center gap-2 px-5 py-2 text-xs font-black transition-all rounded-lg uppercase tracking-widest ${
             viewType === 'personal'
-              ? 'bg-[var(--color-primary)] text-white'
-              : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+              ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm border border-[var(--color-border)]'
+              : 'text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)]'
           }`}
         >
           <UserIcon className="size-4" />
@@ -90,10 +96,10 @@ export function AttendanceHistory() {
         {(isGlobalManager || (projects && projects.length > 0)) && (
           <button
             onClick={() => setViewType('project')}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors rounded-lg ${
+            className={`flex items-center gap-2 px-5 py-2 text-xs font-black transition-all rounded-lg uppercase tracking-widest ${
               viewType === 'project'
-                ? 'bg-[var(--color-primary)] text-white'
-                : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'
+                ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-sm border border-[var(--color-border)]'
+                : 'text-[var(--color-text-disabled)] hover:text-[var(--color-text-primary)]'
             }`}
           >
             <BuildingOfficeIcon className="size-4" />
@@ -102,13 +108,13 @@ export function AttendanceHistory() {
         )}
       </div>
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card-theme)]">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[var(--shadow-card-theme)]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           {viewType === 'project' && (
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 block">Dự án</label>
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-[var(--color-text-disabled)] uppercase tracking-widest px-1">Dự án</label>
               <select
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm outline-none"
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:ring-2 focus:ring-primary-500/20 transition-all hover:border-[var(--color-primary-light)]"
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(Number(e.target.value))}
               >
@@ -119,20 +125,20 @@ export function AttendanceHistory() {
               </select>
             </div>
           )}
-          <div className={viewType === 'personal' ? 'md:col-span-2' : ''}>
-            <label className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 block">Từ ngày</label>
+          <div className={`${viewType === 'personal' ? 'md:col-span-2' : ''} space-y-2`}>
+            <label className="text-[10px] font-black text-[var(--color-text-disabled)] uppercase tracking-widest px-1">Từ ngày</label>
             <input 
               type="date" 
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:ring-2 focus:ring-primary-500/20 transition-all hover:border-[var(--color-primary-light)]"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
-          <div className={viewType === 'personal' ? 'md:col-span-2' : ''}>
-            <label className="text-sm font-medium text-[var(--color-text-secondary)] mb-2 block">Đến ngày</label>
+          <div className={`${viewType === 'personal' ? 'md:col-span-2' : ''} space-y-2`}>
+            <label className="text-[10px] font-black text-[var(--color-text-disabled)] uppercase tracking-widest px-1">Đến ngày</label>
             <input 
               type="date" 
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:ring-2 focus:ring-primary-500/20 transition-all hover:border-[var(--color-primary-light)]"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />

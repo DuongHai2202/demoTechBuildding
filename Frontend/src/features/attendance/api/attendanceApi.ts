@@ -97,9 +97,9 @@ export function useAllAttendance(startDate: string, endDate: string) {
 }
 
 // GET /api/v1/attendance/today
-export function useTodayRecord(userId: number, projectId: number) {
+export function useTodayRecord(userId: number, projectId: number, date: string) {
   return useQuery({
-    queryKey: [...ATTENDANCE_KEY, 'today', userId, projectId],
+    queryKey: [...ATTENDANCE_KEY, 'today', userId, projectId, date],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<Attendance>>('/attendance/today', {
         params: { userId, projectId },
