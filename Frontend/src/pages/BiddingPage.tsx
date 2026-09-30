@@ -1,22 +1,40 @@
 import React, { useState, useMemo } from 'react';
 import { useAllBiddingPackages } from '../features/bidding/api/biddingApi';
+import { useProjects } from '../features/projects/api/projectApi';
 import { 
   FunnelIcon, 
   MagnifyingGlassIcon,
   PlusIcon,
   ShieldCheckIcon,
   TicketIcon,
-  TrashIcon,
   InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
 import { BiddingPackageDetail } from '../features/bidding/components/BiddingPackageDetail';
 import { PackageForm } from '../features/bidding/components/PackageForm';
-import type { BiddingPackage } from '../features/bidding/types/bidding.types';
+import type { BiddingPackage, BiddingStatus } from '../features/bidding/types/bidding.types';
 import { DataTable, type ColumnDef } from '../components/ui/DataTable';
+import { useAuthStore } from '../features/auth/stores/authStore';
+import { hasPermission } from '../features/auth/authorization';
+
+const BIDDING_STATUS_META: Record<BiddingStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Bản nháp', className: 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]' },
+  PENDING: { label: 'Chờ xử lý', className: 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]' },
+  PUBLISHED: { label: 'Đã công bố', className: 'bg-[var(--color-success-bg)] text-[var(--color-success)]' },
+  OPEN: { label: 'Đang nhận hồ sơ', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
+  BIDDING: { label: 'Đang đấu thầu', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
+  INVITING: { label: 'Đang mời thầu', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
+  EVALUATING: { label: 'Đang đánh giá', className: 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]' },
+  AWARDED: { label: 'Đã chọn nhà thầu', className: 'bg-[var(--color-success-bg)] text-[var(--color-success)]' },
+  CLOSED: { label: 'Đã đóng', className: 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]' },
+  CANCELLED: { label: 'Đã hủy', className: 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]' },
+};
 
 const BiddingPage: React.FC = () => {
   const { data: allPackages, isLoading } = useAllBiddingPackages();
+  const { data: projects = [] } = useProjects();
+  const user = useAuthStore((state) => state.user);
+  const canManageBidding = hasPermission(user, 'BIDDING_MANAGE');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [viewingPackage, setViewingPackage] = useState<BiddingPackage | null>(null);
@@ -31,9 +49,25 @@ const BiddingPage: React.FC = () => {
     }) || [];
   }, [allPackages, searchTerm, selectedProjectId]);
 
-  const projects = useMemo(() => {
-    return Array.from(new Set(allPackages?.map(p => ({ id: p.projectId, name: `Dự án ID: ${p.projectId}` })) || []));
-  }, [allPackages]);
+  const projectLabels = useMemo(() => {
+    return new Map(
+      projects.map(project => [
+        project.id,
+        project.projectCode ? `${project.name} · ${project.projectCode}` : project.name,
+      ]),
+    );
+  }, [projects]);
+
+  const biddingProjects = useMemo(() => {
+    const projectIds = Array.from(new Set((allPackages || []).map(pkg => pkg.projectId)));
+
+    return projectIds
+      .map(id => ({
+        id,
+        name: projectLabels.get(id) || `Dự án #${id}`,
+      }))
+      .sort((first, second) => first.name.localeCompare(second.name, 'vi'));
+  }, [allPackages, projectLabels]);
 
   const BIDDING_COLUMNS: ColumnDef<BiddingPackage>[] = [
     {
@@ -51,7 +85,9 @@ const BiddingPage: React.FC = () => {
       render: (pkg) => (
         <div>
           <div className="font-medium text-[var(--color-primary)] hover:underline cursor-pointer">{pkg.packageName}</div>
-          <div className="text-xs text-[var(--color-text-muted)]">Dự án ID: {pkg.projectId}</div>
+          <div className="text-xs text-[var(--color-text-muted)]">
+            {projectLabels.get(pkg.projectId) || `Dự án #${pkg.projectId}`}
+          </div>
         </div>
       )
     },
@@ -75,17 +111,19 @@ const BiddingPage: React.FC = () => {
     },
     {
       key: 'status',
-      header: 'Trạng Thái',
+      header: 'Trạng thái',
       align: 'center',
-      render: (pkg) => (
-        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-          pkg.status === 'PUBLISHED' ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' :
-          pkg.status === 'CLOSED' ? 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]' :
-          'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
-        }`}>
-          {pkg.status}
-        </span>
-      )
+      render: (pkg) => {
+        const status = BIDDING_STATUS_META[pkg.status] || {
+          label: pkg.status || 'Chưa xác định',
+          className: 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]',
+        };
+        return (
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide ${status.className}`}>
+            {status.label}
+          </span>
+        );
+      }
     },
     {
       key: 'actions',
@@ -99,12 +137,6 @@ const BiddingPage: React.FC = () => {
             title="Chi tiết"
           >
             <InformationCircleIcon className="w-5 h-5" />
-          </button>
-          <button 
-            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-full transition-colors"
-            title="Xóa"
-          >
-            <TrashIcon className="w-5 h-5" />
           </button>
         </div>
       )
@@ -150,7 +182,7 @@ const BiddingPage: React.FC = () => {
             value={selectedProjectId || ''}
           >
             <option value="">Tất cả dự án đang đấu thầu</option>
-            {projects.map(p => (
+            {biddingProjects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -173,20 +205,22 @@ const BiddingPage: React.FC = () => {
             <TicketIcon className="w-5 h-5 text-[var(--color-primary)]" />
             Danh sách các gói thầu dự án
           </h2>
-          <button 
-            onClick={() => setShowForm(!showForm)}
-            className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
-          >
-            {showForm ? 'Đóng biểu mẫu' : (
-              <>
-                <PlusIcon className="size-4 stroke-[3px]" />
-                Tạo gói thầu mới
-              </>
-            )}
-          </button>
+          {canManageBidding && (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="btn-primary flex items-center gap-2 px-6 py-2.5 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+            >
+              {showForm ? 'Đóng biểu mẫu' : (
+                <>
+                  <PlusIcon className="size-4 stroke-[3px]" />
+                  Tạo gói thầu mới
+                </>
+              )}
+            </button>
+          )}
         </div>
 
-        {showForm && (
+        {showForm && canManageBidding && (
           <div className="p-6 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]/30 animate-in slide-in-from-top-2">
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
               <PackageForm onClose={() => setShowForm(false)} />

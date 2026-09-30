@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface MaterialRepository extends JpaRepository<Material, Integer> {
     Optional<Material> findByRevitCode(String revitCode);
+    boolean existsByManagementCode(String managementCode);
+    boolean existsByManagementCodeAndIdNot(String managementCode, Integer id);
 }

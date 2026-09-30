@@ -4,12 +4,19 @@ import { useProjects, useDeleteProject } from '../api/projectApi';
 import { DataTable, type ColumnDef } from '../../../components/ui/DataTable';
 import { StatusBadge } from '../../../components/StatusBadge';
 import type { Project } from '../types/project.types';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 
 const ProjectActions = ({ project }: { project: Project }) => {
+  const { confirm } = useActionDialog();
   const deleteMutation = useDeleteProject();
 
-  const handleDelete = () => {
-    if (window.confirm(`Bạn có chắc muốn xóa dự án "${project.name}"?`)) {
+  const handleDelete = async () => {
+    if (await confirm({
+      title: 'Xóa dự án',
+      description: `Dự án "${project.name}" và dữ liệu liên quan có thể bị ảnh hưởng. Bạn có chắc muốn tiếp tục?`,
+      confirmLabel: 'Xóa dự án',
+      variant: 'danger',
+    })) {
       deleteMutation.mutate(project.id);
     }
   };

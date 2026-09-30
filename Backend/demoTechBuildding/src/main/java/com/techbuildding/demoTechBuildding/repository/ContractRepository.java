@@ -12,4 +12,6 @@ public interface ContractRepository extends JpaRepository<Contract, Integer> {
     List<Contract> findByProjectId(Integer projectId);
 
     List<Contract> findByStatus(String status);
+    boolean existsByContractNumber(String contractNumber);
+    boolean existsByContractNumberAndIdNot(String contractNumber, Integer id);
 }

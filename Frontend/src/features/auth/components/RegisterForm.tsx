@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -9,9 +9,20 @@ import { type RegisterFormData, registerSchema } from '../types/auth.schemas';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 
+type ApiError = Error & {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+      errorCode?: string;
+    };
+  };
+};
+
 export function RegisterForm() {
   const navigate = useNavigate();
   const registerMutation = useRegister();
+  const [supportCode, setSupportCode] = useState<string | null>(null);
 
   const {
     register,
@@ -24,12 +35,36 @@ export function RegisterForm() {
 
   const onSubmit = useCallback(
     (data: RegisterFormData) => {
-      registerMutation.mutate(data, {
-        onSuccess: () => {
-          navigate('/verify-otp', { state: { username: data.username } });
+      const payload = {
+        ...data,
+        username: data.username.trim(),
+        fullName: data.fullName.trim(),
+        phone: data.phone?.trim() || undefined,
+        email: data.email?.trim().toLowerCase() || undefined,
+      };
+
+      setSupportCode(null);
+      registerMutation.mutate(payload, {
+        onSuccess: (result) => {
+          navigate('/verify-otp', {
+            state: {
+              username: payload.username,
+              email: result.user.email,
+              demoOtp: result.demoOtp,
+              otpExpiresInSeconds: result.otpExpiresInSeconds,
+              emailQueued: result.emailQueued,
+            },
+          });
         },
-        onError: (err: any) => {
-          const message = err.response?.data?.message || 'Đăng ký thất bại. Tên đăng nhập có thể đã tồn tại.';
+        onError: (err: ApiError) => {
+          const status = err.response?.status;
+          const message = err.response?.data?.message ||
+            (status === 409
+              ? 'Thông tin đăng ký đã tồn tại. Vui lòng kiểm tra lại tên đăng nhập, email hoặc số điện thoại.'
+              : status === 503
+                ? 'Dịch vụ xác thực đang tạm thời gián đoạn. Bạn chưa nhập sai thông tin; vui lòng thử lại sau.'
+                : 'Không thể hoàn tất đăng ký. Vui lòng kiểm tra lại thông tin hoặc thử lại sau.');
+          setSupportCode(err.response?.data?.errorCode ?? null);
           setError('root', { type: 'manual', message });
         },
       });
@@ -60,6 +95,7 @@ export function RegisterForm() {
         label="Họ và tên"
         placeholder="Nhập họ và tên"
         error={errors.fullName?.message}
+        required
         {...register('fullName')}
       />
 
@@ -68,6 +104,7 @@ export function RegisterForm() {
           label="Số điện thoại"
           placeholder="Nhập số điện thoại"
           error={errors.phone?.message}
+          type="tel"
           {...register('phone')}
         />
         <Input
@@ -80,8 +117,13 @@ export function RegisterForm() {
       </div>
 
       {errors.root && (
-        <div className="rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
-          {errors.root.message}
+        <div role="alert" className="rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
+          <p>{errors.root.message}</p>
+          {supportCode && (
+            <p className="mt-1 text-xs opacity-75">
+              Mã tham chiếu hỗ trợ: {supportCode}. Chỉ cung cấp mã này khi liên hệ quản trị viên.
+            </p>
+          )}
         </div>
       )}
 

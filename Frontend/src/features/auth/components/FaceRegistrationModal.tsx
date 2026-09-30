@@ -1,43 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import { api } from '../../../services/axiosInstance';
 import { useAuthStore } from '../stores/authStore';
 import { Button } from '../../../components/ui/Button';
+import { loadFaceModels } from '../../../utils/faceModels';
+import type { ApiResponse } from '../../../types/api.types';
+import type { User } from '../../users/types/user.types';
 
 export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }) {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [status, setStatus] = useState('Đang khởi tạo AI (5-10s)...');
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [modelError, setModelError] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const webcamRef = useRef<Webcam>(null);
 
   useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onComplete();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onComplete]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const loadModels = async () => {
       try {
-        // Use jsdelivr CDN to avoid CORS/MIME issues with straight Github Raw
-        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
-        
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-        
+        setModelError(false);
+        setStatus('Đang tải mô hình AI nội bộ...');
+        await loadFaceModels();
+        if (cancelled) return;
         setIsModelLoaded(true);
         setStatus('Sẵn sàng. Vui lòng đưa rõ khuôn mặt vào giữa khung hình.');
       } catch (e) {
         console.error('Error loading AI models:', e);
-        setStatus('Lỗi tải dữ liệu AI. Vui lòng kiểm tra mạng.');
+        if (!cancelled) {
+          setModelError(true);
+          setStatus('Không tải được mô hình nhận diện nội bộ. Vui lòng thử lại.');
+        }
       }
     };
     loadModels();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAttempt]);
 
   const detectFace = async () => {
     if (!webcamRef.current || !webcamRef.current.video) return;
 
     try {
+      setSaveError(null);
       const video = webcamRef.current.video;
       if (video.readyState !== 4) return;
 
@@ -65,21 +87,43 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
   const saveFace = async () => {
     if (!faceDescriptor) return;
     setStatus('Đang lưu mã hóa sinh trắc học...');
+    setSaveError(null);
     setIsScanning(true);
     try {
       const descriptorArray = Array.from(faceDescriptor);
-      await api.post('/users/me/face-descriptor', {
+      const saveResponse = await api.post<ApiResponse<User>>('/users/me/face-descriptor', {
         faceDescriptor: JSON.stringify(descriptorArray) // Pass as JSON string to endpoint
       });
-      const profileRes = await api.get('/auth/my-profile');
-      useAuthStore.getState().setUser(profileRes.data.data);
+
+      // The save endpoint already returns the freshly mapped account. Use it
+      // immediately so the attendance/settings UI does not keep showing the
+      // stale persisted user object. Fall back to a profile refresh for older
+      // backend builds that do not expose hasFaceRegistered on the save result.
+      let savedUser = saveResponse.data.data;
+      if (!savedUser?.hasFaceRegistered) {
+        const profileRes = await api.get<ApiResponse<User>>('/auth/my-profile');
+        savedUser = profileRes.data.data;
+      }
+      if (!savedUser?.hasFaceRegistered) {
+        throw new Error('Máy chủ chưa xác nhận dữ liệu khuôn mặt đã được lưu. Vui lòng thử lại.');
+      }
+
+      useAuthStore.getState().setUser(savedUser);
       setStatus('Ghi nhận thành công!');
       setTimeout(() => {
         onComplete();
       }, 1500);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      const errorMsg = e.response?.data?.message || 'Lưu thất bại. Thử lại sau.';
+      const response = e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { message?: string } } }).response
+        : undefined;
+      const errorMsg = response?.data?.message || 'Lưu thất bại. Thử lại sau.';
+      setSaveError(errorMsg);
+      // A descriptor that failed to persist must not remain in the captured
+      // state, otherwise the user sees a green check and assumes registration
+      // completed even though the account is still unregistered.
+      setFaceDescriptor(null);
       setStatus(errorMsg);
       setIsScanning(false);
     }
@@ -91,9 +135,23 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="w-full max-w-md rounded-2xl bg-[var(--color-surface)] shadow-2xl overflow-hidden animate-slide-up">
-        <div className="bg-[var(--color-primary)] p-4 text-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onComplete();
+      }}
+    >
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-[var(--color-surface)] shadow-2xl animate-slide-up">
+        <div className="relative bg-[var(--color-primary)] p-4 text-center">
+          <button
+            type="button"
+            onClick={onComplete}
+            className="absolute right-3 top-3 rounded-lg p-2 text-white/80 transition-colors hover:bg-white/15 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/80"
+            aria-label="Đóng đăng ký khuôn mặt"
+            title="Đóng"
+          >
+            <XMarkIcon className="size-5" aria-hidden="true" />
+          </button>
           <h2 className="text-xl font-bold text-white tracking-widest uppercase">Đăng ký khuôn mặt</h2>
           <p className="text-white/80 text-sm mt-1">Hệ thống sẽ dùng mã hóa này để chấm công</p>
         </div>
@@ -110,6 +168,12 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
                 audio={false}
                 screenshotFormat="image/jpeg"
                 videoConstraints={{ facingMode: "user" }}
+                onUserMedia={() => setCameraError(false)}
+                onUserMediaError={(error) => {
+                  console.error('Camera error:', error);
+                  setCameraError(true);
+                  setStatus('Không thể truy cập camera. Hãy cấp quyền camera cho trình duyệt rồi thử lại.');
+                }}
                 className={`absolute inset-0 h-full w-full object-cover transition-all ${faceDescriptor ? 'grayscale brightness-75 blur-sm' : ''}`}
               />
             )}
@@ -131,9 +195,32 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
             )}
           </div>
           
-          <div className="mt-6 text-center text-sm font-medium text-[var(--color-text-secondary)] min-h-[40px]">
+          <div className={`mt-6 min-h-[40px] text-center text-sm font-medium ${saveError ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]'}`}>
              {status}
           </div>
+
+          {saveError && (
+            <div
+              role="alert"
+              className="mt-3 rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger-bg)] px-3 py-2 text-center text-xs font-semibold leading-relaxed text-[var(--color-danger)]"
+            >
+              Khuôn mặt chưa được đăng ký. Vui lòng chụp lại bằng khuôn mặt đúng tài khoản.
+            </div>
+          )}
+
+          {(modelError || cameraError) && (
+            <button
+              type="button"
+              onClick={() => {
+                setCameraError(false);
+                setIsModelLoaded(false);
+                setLoadAttempt((attempt) => attempt + 1);
+              }}
+              className="mx-auto mt-3 block text-sm font-semibold text-[var(--color-primary)] underline"
+            >
+              Thử tải lại
+            </button>
+          )}
           
           <div className="mt-6 flex flex-col gap-3">
             {!faceDescriptor ? (
@@ -150,7 +237,7 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
                 </button>
               </>
             )}
-            {!isScanning && !faceDescriptor && (
+            {!isScanning && !faceDescriptor && !modelError && !cameraError && (
               <button onClick={onComplete} className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors mt-2">
                 Bỏ qua bước này
               </button>

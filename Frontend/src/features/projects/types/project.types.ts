@@ -34,6 +34,7 @@ export interface ProjectMember {
   username: string;
   fullName: string;
   assignedRole: string;
+  active?: boolean;
   joinedAt: string;
 }
 

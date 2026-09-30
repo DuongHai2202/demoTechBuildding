@@ -9,16 +9,17 @@ import type { DesignDiscipline, DesignStatus } from '../types/design.types';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { optionalCode, requiredDate, requiredText, isValidDateValue } from '../../../utils/validation';
 
 const schema = z.object({
-  sheetNumber: z.string().min(1, 'Mã bản vẽ là bắt buộc'),
-  title: z.string().min(1, 'Tiêu đề là bắt buộc'),
-  discipline: z.string().min(1, 'Bộ môn là bắt buộc'),
-  revision: z.string().min(1, 'Phiên bản là bắt buộc'),
-  status: z.string().min(1, 'Trạng thái là bắt buộc'),
-  issuedAt: z.string().min(1, 'Ngày phát hành là bắt buộc'),
-  zoneId: z.number().optional(),
-  fileUrl: z.string().min(1, 'Vui lòng tải lên file bản vẽ'),
+  sheetNumber: optionalCode(),
+  title: requiredText('Tiêu đề phải có ít nhất 2 ký tự', 2),
+  discipline: z.enum(['ARCH', 'STRUC', 'MEP', 'LANDSCAPE', 'INTERIOR']),
+  revision: requiredText('Phiên bản là bắt buộc'),
+  status: z.enum(['PRELIMINARY', 'FOR_REVIEW', 'IFC', 'AS_BUILT']),
+  issuedAt: requiredDate().refine(isValidDateValue, 'Ngày phát hành không hợp lệ'),
+  zoneId: z.number().finite().optional(),
+  fileUrl: requiredText('Vui lòng tải lên file bản vẽ'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -65,6 +66,18 @@ export function DesignSheetForm({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const allowedExtension = /\.(pdf|dwg|dxf|ifc|rvt|jpg|jpeg|png|webp)$/i.test(file.name);
+    if (!allowedExtension) {
+      toast.error('Định dạng file không được hỗ trợ. Chỉ nhận PDF, DWG, DXF, IFC, RVT hoặc ảnh.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('File bản vẽ không được vượt quá 50 MB.');
+      e.target.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
       const fd = new FormData();
@@ -73,7 +86,7 @@ export function DesignSheetForm({
       const { data } = await api.post<ApiResponse<string>>('/files/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setValue('fileUrl', data.data);
+      setValue('fileUrl', data.data, { shouldValidate: true });
     } catch (err) {
       console.error('Upload failed:', err);
       toast.error('Tải file thất bại');
@@ -127,7 +140,7 @@ export function DesignSheetForm({
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Mã bản vẽ</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Mã bản vẽ <span className="font-normal">(để trống để tự sinh)</span></label>
               <input 
                 {...register('sheetNumber')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
@@ -136,7 +149,7 @@ export function DesignSheetForm({
               {errors.sheetNumber && <p className="text-[10px] text-rose-500">{errors.sheetNumber.message}</p>}
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Bộ môn</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Bộ môn <span className="text-rose-500">*</span></label>
               <select 
                 {...register('discipline')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
@@ -151,7 +164,7 @@ export function DesignSheetForm({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tiêu đề bản vẽ</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tiêu đề bản vẽ <span className="text-rose-500">*</span></label>
             <input 
               {...register('title')}
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
@@ -164,7 +177,7 @@ export function DesignSheetForm({
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Khu vực / Phân khu</label>
               <select 
-                {...register('zoneId', { valueAsNumber: true })}
+                {...register('zoneId', { setValueAs: (value) => value === '' ? undefined : Number(value) })}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
               >
                 <option value="">Chọn khu vực (Không bắt buộc)</option>
@@ -174,22 +187,24 @@ export function DesignSheetForm({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Ngày phát hành</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Ngày phát hành <span className="text-rose-500">*</span></label>
               <input 
                 type="date"
                 {...register('issuedAt')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
               />
+              {errors.issuedAt && <p className="text-[10px] text-rose-500">{errors.issuedAt.message}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Revision</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Revision <span className="text-rose-500">*</span></label>
               <input 
                 {...register('revision')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
               />
+              {errors.revision && <p className="text-[10px] text-rose-500">{errors.revision.message}</p>}
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Trạng thái phát hành</label>
@@ -206,10 +221,11 @@ export function DesignSheetForm({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tải lên file bản vẽ (PDF/DWG/IFC...)</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tải lên file bản vẽ (PDF/DWG/IFC...) <span className="text-rose-500">*</span></label>
             <div className="relative group">
               <input 
                 type="file" 
+                accept=".pdf,.dwg,.dxf,.ifc,.rvt,.jpg,.jpeg,.png,.webp"
                 className="absolute inset-0 opacity-0 cursor-pointer z-10"
                 onChange={handleFileUpload}
                 disabled={uploading}

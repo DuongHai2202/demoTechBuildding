@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDesignSheets } from '../api/designApi';
 import { 
   PlusIcon, 
@@ -12,6 +12,10 @@ import { DesignSheetForm } from './index';
 import { useDeleteDesignSheet } from '../api/designApi';
 import { StatusBadge } from '../../../components/StatusBadge';
 import type { DesignDiscipline } from '../types/design.types';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 8;
 
 const DISCIPLINE_MAP: Record<DesignDiscipline, string> = {
   ARCH: 'Kiến trúc',
@@ -24,15 +28,25 @@ const DISCIPLINE_MAP: Record<DesignDiscipline, string> = {
 
 
 export function DesignSheetList({ projectId, zoneId }: { projectId: number, zoneId?: number }) {
+  const { confirm } = useActionDialog();
   const { data: sheets, isLoading } = useDesignSheets(projectId, zoneId);
   const deleteSheet = useDeleteDesignSheet();
   const [showForm, setShowForm] = useState(false);
   const [editingSheet, setEditingSheet] = useState<any>(null);
   const [filterDiscipline, setFilterDiscipline] = useState<string>('ALL');
+  const [page, setPage] = useState(1);
 
   const filtered = (sheets || []).filter(s => 
     filterDiscipline === 'ALL' || s.discipline === filterDiscipline
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterDiscipline]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedSheets = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)]">
@@ -82,8 +96,9 @@ export function DesignSheetList({ projectId, zoneId }: { projectId: number, zone
             </p>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-1 divide-y divide-[var(--color-border)]">
-            {filtered.map(sheet => (
+            {paginatedSheets.map(sheet => (
               <div key={sheet.id} className="group flex items-center gap-4 p-4 hover:bg-[var(--color-bg)] transition-colors">
                 <div className="size-12 rounded-lg bg-[var(--color-surface-alt)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
                   {sheet.fileUrl?.toLowerCase().endsWith('.pdf') ? (
@@ -116,7 +131,7 @@ export function DesignSheetList({ projectId, zoneId }: { projectId: number, zone
                     <EyeIcon className="size-4" />
                   </button>
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       setEditingSheet(sheet);
                       setShowForm(true);
                     }}
@@ -126,8 +141,13 @@ export function DesignSheetList({ projectId, zoneId }: { projectId: number, zone
                     <PencilSquareIcon className="size-4" />
                   </button>
                   <button 
-                    onClick={() => {
-                      if (confirm('Bạn có chắc chắn muốn xóa bản vẽ này?')) {
+                    onClick={async () => {
+                      if (await confirm({
+                        title: 'Xóa hồ sơ bản vẽ',
+                        description: 'Hồ sơ bản vẽ này sẽ bị xóa khỏi dự án. Bạn có chắc muốn tiếp tục?',
+                        confirmLabel: 'Xóa bản vẽ',
+                        variant: 'danger',
+                      })) {
                         deleteSheet.mutate(sheet.id);
                       }
                     }}
@@ -146,6 +166,15 @@ export function DesignSheetList({ projectId, zoneId }: { projectId: number, zone
               </div>
             ))}
           </div>
+          <Pagination
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+            itemLabel="bản vẽ"
+            ariaLabel="Phân trang bản vẽ"
+          />
+          </>
         )}
       </div>
 

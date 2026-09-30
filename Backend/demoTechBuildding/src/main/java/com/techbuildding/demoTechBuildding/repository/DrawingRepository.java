@@ -10,4 +10,5 @@ import java.util.List;
 public interface DrawingRepository extends JpaRepository<Drawing, Integer> {
     List<Drawing> findByProjectId(Integer projectId);
     List<Drawing> findByContractId(Integer contractId);
+    boolean existsByDrawingNumber(String drawingNumber);
 }

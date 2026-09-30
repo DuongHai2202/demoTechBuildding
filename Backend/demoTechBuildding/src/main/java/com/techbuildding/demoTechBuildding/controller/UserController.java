@@ -3,6 +3,7 @@ package com.techbuildding.demoTechBuildding.controller;
 import com.techbuildding.demoTechBuildding.dto.request.user.UserRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
 import com.techbuildding.demoTechBuildding.dto.response.user.UserResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.user.FaceVerificationDataDTO;
 import com.techbuildding.demoTechBuildding.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -29,6 +31,7 @@ public class UserController {
      */
     @Operation(summary = "Create a new user", description = "Register a new user account. Username and email must be unique.")
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseData<UserResponseDTO> createUser(@Valid @RequestBody UserRequestDTO request) {
         log.info("Request to create user: {}", request.getUsername());
@@ -44,6 +47,7 @@ public class UserController {
      */
     @Operation(summary = "Get user by ID", description = "Retrieve detailed user information including assigned roles.")
     @GetMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<UserResponseDTO> getUserById(
             @Parameter(description = "User ID", example = "1") @PathVariable("userId") Long userId) {
         log.info("Request to get user by id: {}", userId);
@@ -57,6 +61,7 @@ public class UserController {
      */
     @Operation(summary = "Get all users", description = "Retrieve a list of all users in the system.")
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<List<UserResponseDTO>> getAllUsers() {
         log.info("Request to get all users");
 
@@ -69,6 +74,7 @@ public class UserController {
      */
     @Operation(summary = "Update user information", description = "Update for user.")
     @PutMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<UserResponseDTO> updateUser(
             @Parameter(description = "User ID to update", example = "1") @PathVariable("userId") Long userId,
             @Valid @RequestBody UserRequestDTO request) {
@@ -85,6 +91,7 @@ public class UserController {
      */
     @Operation(summary = "Delete a user", description = "Mark the user as deleted instead of permanently removing from the database.")
     @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<Void> deleteUser(
             @Parameter(description = "User ID to delete", example = "1") @PathVariable("userId") Long userId) {
         log.info("Request to delete user id: {}", userId);
@@ -95,11 +102,30 @@ public class UserController {
         return new ResponseData<>(HttpStatus.OK.value(), "User deleted successfully");
     }
 
+    /** Restore an account previously soft-deleted by an administrator. */
+    @Operation(summary = "Restore a soft-deleted user")
+    @PostMapping("/{userId}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseData<Void> restoreUser(@PathVariable Long userId) {
+        userService.restoreUser(userId);
+        return new ResponseData<>(HttpStatus.OK.value(), "User restored successfully");
+    }
+
+    /** Permanently delete an account and its dependent records. */
+    @Operation(summary = "Permanently delete a user", description = "Irreversible administrator-only operation.")
+    @DeleteMapping("/{userId}/hard")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseData<Void> hardDeleteUser(@PathVariable Long userId) {
+        userService.hardDeleteUser(userId);
+        return new ResponseData<>(HttpStatus.OK.value(), "User permanently deleted");
+    }
+
     /**
      * POST /api/v1/users/me/face-descriptor - Save face descriptor
      */
     @Operation(summary = "Save face descriptor", description = "Save the 128-dimensional face descriptor array from face-api.js.")
     @PostMapping("/me/face-descriptor")
+    @PreAuthorize("isAuthenticated()")
     public ResponseData<UserResponseDTO> saveMyFaceDescriptor(@RequestBody java.util.Map<String, Object> body) {
         String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
         log.info("Request to save face descriptor for user: {}", username);
@@ -111,5 +137,20 @@ public class UserController {
 
         UserResponseDTO user = userService.saveFaceDescriptor(username, faceDescriptor);
         return new ResponseData<>(HttpStatus.OK.value(), "Face descriptor saved successfully", user);
+    }
+
+    /**
+     * Return biometric template data only to the currently authenticated
+     * account. This keeps it out of the general profile and user-management
+     * APIs used by administrators. A server-side face verification service is
+     * still recommended before production use.
+     */
+    @Operation(summary = "Get my face verification data", description = "Returns the current account's face descriptor for the local demo verifier.")
+    @GetMapping("/me/face-descriptor")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseData<FaceVerificationDataDTO> getMyFaceVerificationData() {
+        String username = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        FaceVerificationDataDTO data = userService.getMyFaceVerificationData(username);
+        return new ResponseData<>(HttpStatus.OK.value(), "Face verification data retrieved", data);
     }
 }

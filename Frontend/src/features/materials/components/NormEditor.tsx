@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMaterials, useMaterialNorms, useCreateMaterialNorm, useDeleteMaterialNorm } from '../api/materialApi';
 import { PlusIcon, TrashIcon, CalculatorIcon } from '@heroicons/react/24/outline';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 8;
 
 export function NormEditor({ boqItemId, boqItemName }: { boqItemId: number; boqItemName: string }) {
   const { data: norms } = useMaterialNorms(boqItemId);
@@ -10,6 +13,15 @@ export function NormEditor({ boqItemId, boqItemName }: { boqItemId: number; boqI
 
   const [selectedMaterial, setSelectedMaterial] = useState<number | ''>('');
   const [quantity, setQuantity] = useState<number | ''>('');
+  const [page, setPage] = useState(1);
+  const normList = norms || [];
+  const totalPages = Math.max(1, Math.ceil(normList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedNorms = normList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [boqItemId, norms?.length]);
 
   const handleAdd = () => {
     if (selectedMaterial && quantity) {
@@ -63,41 +75,52 @@ export function NormEditor({ boqItemId, boqItemName }: { boqItemId: number; boqI
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-[var(--color-bg)] border-b border-[var(--color-border)] uppercase text-[var(--color-text-muted)] font-bold">
-            <tr>
-              <th className="px-4 py-3">Vật tư</th>
-              <th className="px-4 py-3 text-right">Định mức</th>
-              <th className="px-4 py-3 text-center">ĐVT</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-border)]">
-            {norms?.map(norm => (
-              <tr key={norm.id} className="hover:bg-[var(--color-bg)]/50">
-                <td className="px-4 py-3 font-medium text-[var(--color-text-primary)]">{norm.materialName}</td>
-                <td className="px-4 py-3 text-right font-bold text-[var(--color-primary)]">{norm.quantityPerUnit}</td>
-                <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">{norm.materialUnit}</td>
-                <td className="px-4 py-3 text-right">
-                  <button 
-                    onClick={() => deleteNorm.mutate({ id: norm.id, boqItemId })}
-                    className="text-rose-500 hover:bg-rose-50 p-1 rounded-md transition-colors"
-                  >
-                    <TrashIcon className="size-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {norms?.length === 0 && (
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[var(--color-bg)] border-b border-[var(--color-border)] uppercase text-[var(--color-text-muted)] font-bold">
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-[var(--color-text-muted)] italic">
-                  Chưa có định mức nào được thiết lập.
-                </td>
+                <th className="px-4 py-3">Vật tư</th>
+                <th className="px-4 py-3 text-right">Định mức</th>
+                <th className="px-4 py-3 text-center">ĐVT</th>
+                <th className="px-4 py-3"></th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border)]">
+              {normList.length > 0 ? (
+                paginatedNorms.map(norm => (
+                  <tr key={norm.id} className="hover:bg-[var(--color-bg)]/50">
+                    <td className="px-4 py-3 font-medium text-[var(--color-text-primary)]">{norm.materialName}</td>
+                    <td className="px-4 py-3 text-right font-bold text-[var(--color-primary)]">{norm.quantityPerUnit}</td>
+                    <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">{norm.materialUnit}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => deleteNorm.mutate({ id: norm.id, boqItemId })}
+                        className="text-rose-500 hover:bg-rose-50 p-1 rounded-md transition-colors"
+                      >
+                        <TrashIcon className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--color-text-muted)] italic">
+                    Chưa có định mức nào được thiết lập.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          total={normList.length}
+          onPageChange={setPage}
+          itemLabel="định mức"
+          ariaLabel="Phân trang định mức vật tư"
+        />
       </div>
     </div>
   );

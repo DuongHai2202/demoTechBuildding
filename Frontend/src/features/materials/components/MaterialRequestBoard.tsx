@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   useProjectMaterialRequests, 
   useCheckMaterialRequest, 
@@ -17,26 +17,48 @@ import {
   ClockIcon,
   PlusIcon,
   PencilSquareIcon,
-  TrashIcon
+  TrashIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../auth/stores/authStore';
+import { hasPermission } from '../../auth/authorization';
 import { MaterialRequestForm } from './MaterialRequestForm';
+import { MaterialRequestDetailModal } from './MaterialRequestDetailModal';
 import type { MaterialRequest } from '../types/material.types';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 8;
 
 export function MaterialRequestBoard({ projectId }: { projectId: number }) {
-  const { data: requests, isLoading } = useProjectMaterialRequests(projectId);
+  const { confirm } = useActionDialog();
+  const user = useAuthStore(s => s.user);
+  const canManageMaterials = hasPermission(user, 'MATERIAL_MANAGE');
+  const canRequestMaterials = hasPermission(user, 'MATERIAL_REQUEST');
+  const { data: requests, isLoading } = useProjectMaterialRequests(projectId, { enabled: canRequestMaterials });
   const checkMutation = useCheckMaterialRequest();
   const approveMutation = useApproveMaterialRequest();
   const rejectMutation = useRejectMaterialRequest();
   const deleteMutation = useDeleteMaterialRequest();
   
-  const user = useAuthStore(s => s.user);
-
   const [actionModal, setActionModal] = useState<{ isOpen: boolean, reqId: number | null, actionType: 'check' | 'approve' | 'reject' | null }>({ isOpen: false, reqId: null, actionType: null });
   const [actionNotes, setActionNotes] = useState('');
 
   const [formModal, setFormModal] = useState<{ isOpen: boolean, initialData: MaterialRequest | null }>({ isOpen: false, initialData: null });
+  const [viewingRequest, setViewingRequest] = useState<MaterialRequest | null>(null);
 
+  const requestList = requests || [];
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [requestList.length]);
+
+  const totalPages = Math.max(1, Math.ceil(requestList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRequests = requestList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  if (!canRequestMaterials) return null;
   if (isLoading) return <LoadingSkeleton />;
 
   const openActionModal = (id: number, action: 'check' | 'approve' | 'reject') => {
@@ -55,8 +77,13 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
     setActionModal({ isOpen: false, reqId: null, actionType: null });
   };
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa yêu cầu này?')) {
+  const handleDelete = async (id: number) => {
+    if (await confirm({
+      title: 'Xóa yêu cầu vật tư',
+      description: 'Yêu cầu vật tư này sẽ bị xóa khỏi dự án. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa yêu cầu',
+      variant: 'danger',
+    })) {
       deleteMutation.mutate({ id, projectId });
     }
   };
@@ -78,7 +105,7 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {requests?.map(req => (
+        {paginatedRequests.map(req => (
           <div 
             key={req.id}
             className="flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm hover:border-[var(--color-primary)]/30 transition-all group"
@@ -90,22 +117,24 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
                   <ClockIcon className="size-3" /> {formatDate(req.createdAt)}
                 </span>
                 
-                {req.status === 'PENDING' && (
+                {canRequestMaterials && req.status === 'PENDING' && (
                   <div className="flex items-center gap-1 ml-auto md:ml-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                       onClick={() => setFormModal({ isOpen: true, initialData: req })}
                       className="p-1 px-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1 transition-all"
                       title="Sửa yêu cầu"
                     >
                       <PencilSquareIcon className="size-3.5" /> Sửa
                     </button>
-                    <button 
+                    {canManageMaterials && (
+                    <button
                       onClick={() => handleDelete(req.id)}
                       className="p-1 px-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-1 transition-all"
                       title="Xóa yêu cầu"
                     >
                       <TrashIcon className="size-3.5" /> Xóa
                     </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -141,7 +170,16 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
             </div>
 
             <div className="flex items-center gap-2 md:border-l md:pl-6 border-[var(--color-border)] pt-4 md:pt-0 border-t md:border-t-0 mt-4 md:mt-0 justify-end md:justify-start">
-              {req.status === 'PENDING' && (
+              <button
+                type="button"
+                onClick={() => setViewingRequest(req)}
+                className="p-2 rounded-xl text-[var(--color-text-muted)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-primary)] transition-colors"
+                title="Xem chi tiết"
+                aria-label={`Xem chi tiết MR-${req.id.toString().padStart(4, '0')}`}
+              >
+                <EyeIcon className="size-5" />
+              </button>
+              {canManageMaterials && req.status === 'PENDING' && (
                 <button 
                   onClick={() => openActionModal(req.id, 'check')}
                   className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90 hover:scale-105 transition-all shadow-sm shadow-amber-500/20 cursor-pointer"
@@ -149,7 +187,7 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
                   <ShieldCheckIcon className="size-4" /> Kiểm tra
                 </button>
               )}
-              {req.status === 'CHECKED' && (
+              {canManageMaterials && req.status === 'CHECKED' && (
                 <button 
                   onClick={() => openActionModal(req.id, 'approve')}
                   className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90 hover:scale-105 transition-all shadow-sm shadow-emerald-500/20 cursor-pointer"
@@ -157,7 +195,7 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
                   <CheckCircleIcon className="size-4" /> Phê duyệt
                 </button>
               )}
-              {(req.status === 'PENDING' || req.status === 'CHECKED') && (
+              {canManageMaterials && (req.status === 'PENDING' || req.status === 'CHECKED') && (
                 <button 
                   onClick={() => openActionModal(req.id, 'reject')}
                   className="px-4 py-2 rounded-xl border border-[var(--color-danger)]/50 text-[var(--color-danger)] text-xs font-bold flex items-center gap-1.5 hover:bg-[var(--color-danger-bg)] hover:scale-105 transition-all cursor-pointer"
@@ -170,7 +208,16 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
         ))}
       </div>
 
-      {requests?.length === 0 && (
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={requestList.length}
+        onPageChange={setPage}
+        itemLabel="yêu cầu vật tư"
+        ariaLabel="Phân trang yêu cầu vật tư"
+      />
+
+      {requestList.length === 0 && (
         <div className="py-20 text-center text-[var(--color-text-muted)] dark:text-slate-500 border-2 border-dashed border-[var(--color-border)] dark:border-slate-700 rounded-3xl">
           Chưa có yêu cầu vật tư nào.
         </div>
@@ -225,6 +272,18 @@ export function MaterialRequestBoard({ projectId }: { projectId: number }) {
             />
           </div>
         </div>
+      )}
+
+      {viewingRequest && (
+        <MaterialRequestDetailModal
+          request={viewingRequest}
+          canEdit={canRequestMaterials && viewingRequest.status === 'PENDING'}
+          onClose={() => setViewingRequest(null)}
+          onEdit={() => {
+            setFormModal({ isOpen: true, initialData: viewingRequest });
+            setViewingRequest(null);
+          }}
+        />
       )}
     </div>
   );

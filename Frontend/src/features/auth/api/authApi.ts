@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
 import type { User } from '../../users/types/user.types';
-import type { LoginRequest, RegisterRequest, TokenResponse, VerifyOtpRequest } from '../types/auth.types';
+import type { LoginRequest, RegisterRequest, RegisterResponse, TokenResponse, VerifyOtpRequest } from '../types/auth.types';
 import { useAuthStore } from '../stores/authStore';
 
 // === API Functions ===
@@ -18,8 +18,9 @@ async function fetchProfileFn(): Promise<User> {
   return res.data.data;
 }
 
-async function registerFn(data: RegisterRequest): Promise<void> {
-  await api.post('/auth/register', data);
+async function registerFn(data: RegisterRequest): Promise<RegisterResponse> {
+  const res = await api.post<ApiResponse<RegisterResponse>>('/auth/register', data);
+  return res.data.data;
 }
 
 async function verifyOtpFn(data: VerifyOtpRequest): Promise<void> {

@@ -27,11 +27,7 @@ public class BimModelController {
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseData<BimModelResponseDTO> createModel(@RequestBody BimModelRequestDTO request) {
         log.info("Create a new BIM model");
-        try {
-            return new ResponseData<>(HttpStatus.CREATED.value(), "BIM model created successfully", bimModelService.createModel(request));
-        } catch (Exception e) {
-            return new ResponseData<>(HttpStatus.BAD_REQUEST.value(), e.getMessage());
-        }
+        return new ResponseData<>(HttpStatus.CREATED.value(), "BIM model created successfully", bimModelService.createModel(request));
     }
 
     @Operation(summary = "Get BIM models", description = "Retrieve all BIM models for a project, optionally filtered by zone")

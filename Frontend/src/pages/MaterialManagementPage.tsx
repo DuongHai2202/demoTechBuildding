@@ -17,14 +17,20 @@ import {
   TrashIcon,
   CheckCircleIcon,
   XCircleIcon,
+  EyeIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { StatusBadge } from '../components/StatusBadge';
 import { MaterialRequestForm } from '../features/materials/components/MaterialRequestForm';
+import { MaterialRequestDetailModal } from '../features/materials/components/MaterialRequestDetailModal';
 import type { MaterialRequest } from '../features/materials/types/material.types';
 import { useAuthStore } from '../features/auth/stores/authStore';
+import { hasPermission } from '../features/auth/authorization';
 import { DataTable, type ColumnDef } from '../components/ui/DataTable';
+import { useActionDialog } from '../components/ui/ActionDialog';
 
 const MaterialManagementPage: React.FC = () => {
+  const { confirm } = useActionDialog();
   const { data: requests, isLoading } = useAllMaterialRequests();
   const checkMutation = useCheckMaterialRequest();
   const approveMutation = useApproveMaterialRequest();
@@ -35,11 +41,14 @@ const MaterialManagementPage: React.FC = () => {
 
   const [showForm, setShowForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<MaterialRequest | null>(null);
+  const [viewingRequest, setViewingRequest] = useState<MaterialRequest | null>(null);
   const [actionModal, setActionModal] = useState<{ isOpen: boolean, reqId: number | null, actionType: 'check' | 'approve' | 'reject' | null }>({ isOpen: false, reqId: null, actionType: null });
   const [actionNotes, setActionNotes] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const canManageMaterials = hasPermission(user, 'MATERIAL_MANAGE');
+  const canRequestMaterials = hasPermission(user, 'MATERIAL_REQUEST');
 
   const openActionModal = (id: number, action: 'check' | 'approve' | 'reject') => {
     setActionModal({ isOpen: true, reqId: id, actionType: action });
@@ -84,7 +93,16 @@ const MaterialManagementPage: React.FC = () => {
   }, [requests, searchTerm, selectedProjectId]);
 
   const projects = useMemo(() => {
-    return Array.from(new Set(requests?.map((r: MaterialRequest) => ({ id: r.projectId, name: r.projectName || `Dự án ID: ${r.projectId}` })) || []));
+    const byId = new Map<number, { id: number; name: string }>();
+    (requests || []).forEach((request: MaterialRequest) => {
+      if (!byId.has(request.projectId)) {
+        byId.set(request.projectId, {
+          id: request.projectId,
+          name: request.projectName || `Dự án ID: ${request.projectId}`,
+        });
+      }
+    });
+    return Array.from(byId.values());
   }, [requests]);
 
   const MATERIAL_COLUMNS: ColumnDef<MaterialRequest>[] = [
@@ -147,7 +165,7 @@ const MaterialManagementPage: React.FC = () => {
       align: 'right',
       render: (req) => (
         <div className="flex justify-end gap-1">
-          {req.status === 'PENDING' && (
+          {canManageMaterials && req.status === 'PENDING' && (
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -160,7 +178,7 @@ const MaterialManagementPage: React.FC = () => {
               <ShieldCheckIcon className="w-5 h-5 shadow-sm" />
             </button>
           )}
-          {req.status === 'CHECKED' && (
+          {canManageMaterials && req.status === 'CHECKED' && (
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -173,7 +191,7 @@ const MaterialManagementPage: React.FC = () => {
               <CheckCircleIcon className="w-5 h-5" />
             </button>
           )}
-          {(req.status === 'PENDING' || req.status === 'CHECKED') && (
+          {canManageMaterials && (req.status === 'PENDING' || req.status === 'CHECKED') && (
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -186,30 +204,52 @@ const MaterialManagementPage: React.FC = () => {
               <XCircleIcon className="w-5 h-5" />
             </button>
           )}
-          <button 
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              setEditingRequest(req);
-              setShowForm(true);
+              setViewingRequest(req);
             }}
             className="p-1.5 text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]/50 rounded-lg transition-all active:scale-90"
-            title="Chi tiết"
+            title="Xem chi tiết"
+            aria-label={`Xem chi tiết MR-${req.id.toString().padStart(4, '0')}`}
           >
-            <PlusIcon className="w-5 h-5 rotate-45" />
+            <EyeIcon className="w-5 h-5" />
           </button>
-          <button 
-            onClick={(e) => {
+          {canRequestMaterials && req.status === 'PENDING' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingRequest(req);
+                setShowForm(true);
+              }}
+              className="p-1.5 text-slate-400 hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-light)]/50 rounded-lg transition-all active:scale-90"
+              title="Chỉnh sửa yêu cầu"
+              aria-label={`Chỉnh sửa MR-${req.id.toString().padStart(4, '0')}`}
+            >
+              <PencilSquareIcon className="w-5 h-5" />
+            </button>
+          )}
+          {canManageMaterials && req.status === 'PENDING' && (
+            <button
+              onClick={async (e) => {
               e.stopPropagation();
-              if (window.confirm('Xóa yêu cầu vật tư này?')) {
+              if (await confirm({
+                title: 'Xóa yêu cầu vật tư',
+                description: 'Yêu cầu vật tư này sẽ bị xóa khỏi dự án. Bạn có chắc muốn tiếp tục?',
+                confirmLabel: 'Xóa yêu cầu',
+                variant: 'danger',
+              })) {
                 deleteMutation.mutate({ id: req.id, projectId: req.projectId });
               }
-            }}
-            disabled={deleteMutation.isPending}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100/50 rounded-lg transition-all active:scale-90"
-            title="Xóa"
-          >
-            <TrashIcon className="w-5 h-5" />
-          </button>
+              }}
+              disabled={deleteMutation.isPending}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-100/50 rounded-lg transition-all active:scale-90"
+              title="Xóa yêu cầu đang chờ duyệt"
+              aria-label={`Xóa MR-${req.id.toString().padStart(4, '0')}`}
+            >
+              <TrashIcon className="w-5 h-5" />
+            </button>
+          )}
         </div>
       )
     }
@@ -296,6 +336,14 @@ const MaterialManagementPage: React.FC = () => {
         {showForm && (
           <div className="p-6 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]/30 animate-in slide-in-from-top-2">
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-sm">
+              <div className="mb-5">
+                <h3 className="text-base font-extrabold text-[var(--color-text-primary)]">
+                  {editingRequest ? 'Chỉnh sửa yêu cầu vật tư' : 'Tạo yêu cầu vật tư mới'}
+                </h3>
+                <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                  Chỉ yêu cầu đang chờ duyệt mới có thể chỉnh sửa.
+                </p>
+              </div>
               <MaterialRequestForm 
                 projectId={editingRequest?.projectId || projects[0]?.id || 1}
                 initialData={editingRequest}
@@ -317,6 +365,19 @@ const MaterialManagementPage: React.FC = () => {
           />
         </div>
       </div>
+
+      {viewingRequest && (
+        <MaterialRequestDetailModal
+          request={viewingRequest}
+          canEdit={canRequestMaterials && viewingRequest.status === 'PENDING'}
+          onClose={() => setViewingRequest(null)}
+          onEdit={() => {
+            setEditingRequest(viewingRequest);
+            setViewingRequest(null);
+            setShowForm(true);
+          }}
+        />
+      )}
 
       {/* Action Modal (Check/Approve/Reject) */}
       {actionModal.isOpen && (

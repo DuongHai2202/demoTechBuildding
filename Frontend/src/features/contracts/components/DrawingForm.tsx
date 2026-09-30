@@ -7,11 +7,12 @@ import { useCreateDrawing } from '../api/contractApi';
 import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
 import { DocumentPlusIcon, XMarkIcon, PaperClipIcon } from '@heroicons/react/24/outline';
+import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  name: z.string().min(1, 'Tên bản vẽ là bắt buộc'),
-  drawingNumber: z.string().optional(),
-  version: z.string().optional(),
+  name: requiredText('Tên bản vẽ phải có ít nhất 2 ký tự', 2),
+  drawingNumber: optionalCode(),
+  version: optionalText(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -34,6 +35,16 @@ export function DrawingForm({ projectId, contractId, onClose }: DrawingFormProps
   const onSubmit = async (data: FormData) => {
     if (!file) {
       toast.error('Vui lòng tải lên file bản vẽ (PDF/CAD/Image).');
+      return;
+    }
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'application/acad', 'application/octet-stream'];
+    const allowedExtension = /\.(pdf|dwg|dxf|ifc|jpg|jpeg|png|webp)$/i.test(file.name);
+    if (!allowedExtension && !allowedTypes.includes(file.type)) {
+      toast.error('Định dạng file không được hỗ trợ. Chỉ nhận PDF, DWG, DXF, IFC hoặc ảnh.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('File bản vẽ không được vượt quá 20 MB.');
       return;
     }
 
@@ -96,7 +107,7 @@ export function DrawingForm({ projectId, contractId, onClose }: DrawingFormProps
             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Số hiệu</label>
             <input 
               {...register('drawingNumber')}
-              placeholder="VD: ARC-01"
+              placeholder="Để trống để tự sinh"
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
           </div>
@@ -117,7 +128,8 @@ export function DrawingForm({ projectId, contractId, onClose }: DrawingFormProps
               {file ? file.name : "Tải lên file bản vẽ (PDF, DWG, Image)"}
             </span>
             <input 
-              type="file" 
+              type="file"
+              accept=".pdf,.dwg,.dxf,.ifc,.jpg,.jpeg,.png,.webp"
               className="hidden" 
               onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
             />

@@ -19,10 +19,26 @@ export function MasterPlanForm({ projectId, onClose }: MasterPlanFormProps) {
     parentId: undefined,
     displayOrder: 0,
   });
+  const [error, setError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createItem.mutate(formData, {
+    const name = formData.name.trim();
+    if (name.length < 2) {
+      setError('Tên hạng mục phải có ít nhất 2 ký tự.');
+      return;
+    }
+    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
+      setError('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.');
+      return;
+    }
+    const displayOrder = formData.displayOrder ?? 0;
+    if (!Number.isInteger(displayOrder) || displayOrder < 0) {
+      setError('Thứ tự hiển thị phải là số nguyên không âm.');
+      return;
+    }
+    setError('');
+    createItem.mutate({ ...formData, name, displayOrder, description: formData.description?.trim() }, {
       onSuccess: () => {
         onClose();
       }
@@ -46,7 +62,7 @@ export function MasterPlanForm({ projectId, onClose }: MasterPlanFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="block text-xs font-bold text-[var(--color-text-muted)] uppercase mb-1">Tên hạng mục / công việc</label>
+          <label className="block text-xs font-bold text-[var(--color-text-muted)] uppercase mb-1">Tên hạng mục / công việc <span className="text-rose-500">*</span></label>
           <input
             required
             type="text"
@@ -54,6 +70,7 @@ export function MasterPlanForm({ projectId, onClose }: MasterPlanFormProps) {
             onChange={e => setFormData({ ...formData, name: e.target.value })}
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
             placeholder="VD: Ép cọc móng, Xây thô tầng 1..."
+            maxLength={200}
           />
         </div>
 
@@ -113,6 +130,8 @@ export function MasterPlanForm({ projectId, onClose }: MasterPlanFormProps) {
           />
         </div>
       </div>
+
+      {error && <p className="text-xs font-medium text-rose-500">{error}</p>}
 
       <div className="flex justify-end gap-3 pt-2">
         <button

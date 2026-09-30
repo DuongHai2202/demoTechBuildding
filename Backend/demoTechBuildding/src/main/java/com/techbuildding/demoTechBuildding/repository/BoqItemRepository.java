@@ -10,4 +10,5 @@ import java.util.List;
 public interface BoqItemRepository extends JpaRepository<BoqItem, Integer> {
 
     List<BoqItem> findByContractId(Integer contractId);
+    boolean existsByItemCode(String itemCode);
 }

@@ -1,12 +1,20 @@
 server:
   port: 8080
 
+# Local demo helpers. Set APP_DEMO_AUTO_FILL_OTP=false in production; the
+# email delivery and Redis verification flow remains enabled in both modes.
+app:
+  demo:
+    auto-fill-otp: ${APP_DEMO_AUTO_FILL_OTP:true}
+  auth:
+    otp-expiry-minutes: ${OTP_EXPIRY_MINUTES:5}
+
 spring:
   application:
     name: techbuilding-backend
   
   datasource:
-    url: jdbc:mysql://localhost:3308/${MYSQL_DATABASE:techbuilding_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3308/${MYSQL_DATABASE:techbuilding_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_0900_ai_ci
     username: ${MYSQL_USER:tech_user}
     password: ${MYSQL_PASSWORD:tech_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -32,18 +40,23 @@ spring:
 
   mail:
     host: smtp.gmail.com
-    port: 465
-    username: ${MAIL_USERNAME:duongvanhai2202@gmail.com}
-    password: ${MAIL_PASSWORD:itlmkflryiovihas}
-    from: duongvanhai2202@gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:${spring.mail.username}}
     properties:
       mail:
         smtp:
           auth: true
-          ssl:
+          starttls:
             enable: true
-          # starttls:
-          #   enable: true # Port 465 uses SSL, not STARTTLS
+            required: true
+          ssl:
+            trust: smtp.gmail.com
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 
   # Redis Configuration
   data:
@@ -54,7 +67,7 @@ spring:
 
 # MinIO Object Storage Configuration
 minio:
-  endpoint: http://localhost:9090
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9090}
   access-key: ${MINIO_ROOT_USER:admin}
   secret-key: ${MINIO_ROOT_PASSWORD:admin123}
   bucket-name: techbuilding-storage

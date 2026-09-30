@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   XMarkIcon, 
   MagnifyingGlassIcon, 
@@ -8,17 +8,26 @@ import {
 } from '@heroicons/react/24/outline';
 import { useUsers, useUpdateUser } from '../features/users/api/userApi';
 import type { Partner } from '../features/partners/types/partner.types';
-import type { User } from '../features/users/types/user.types';
+import { Pagination } from '../components/ui/Pagination';
 
 interface PartnerLinkModalProps {
   partner: Partner | null;
   onClose: () => void;
 }
 
+const PAGE_SIZE = 6;
+
 export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalProps) {
   const { data: users, isLoading } = useUsers();
   const updateUser = useUpdateUser();
   const [search, setSearch] = useState('');
+  const [assignedPage, setAssignedPage] = useState(1);
+  const [availablePage, setAvailablePage] = useState(1);
+
+  useEffect(() => {
+    setAssignedPage(1);
+    setAvailablePage(1);
+  }, [partner?.id, users?.length, search]);
 
   if (!partner) return null;
 
@@ -28,6 +37,12 @@ export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalP
     u.roles.includes('PARTNER') &&
     (u.fullName?.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()))
   );
+  const assignedTotalPages = Math.max(1, Math.ceil(partnerUsers.length / PAGE_SIZE));
+  const currentAssignedPage = Math.min(assignedPage, assignedTotalPages);
+  const paginatedPartnerUsers = partnerUsers.slice((currentAssignedPage - 1) * PAGE_SIZE, currentAssignedPage * PAGE_SIZE);
+  const availableTotalPages = Math.max(1, Math.ceil(unlinkedUsers.length / PAGE_SIZE));
+  const currentAvailablePage = Math.min(availablePage, availableTotalPages);
+  const paginatedUnlinkedUsers = unlinkedUsers.slice((currentAvailablePage - 1) * PAGE_SIZE, currentAvailablePage * PAGE_SIZE);
 
   const handleLink = (userId: number) => {
     updateUser.mutate({ 
@@ -72,7 +87,7 @@ export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalP
                 <div className="h-full flex flex-col items-center justify-center text-[var(--color-text-muted)] italic text-xs p-4 text-center">
                   Tiến hành gán tài khoản từ danh sách bên phải để cho phép đối tác truy cập portal.
                 </div>
-              ) : partnerUsers.map(user => (
+              ) : paginatedPartnerUsers.map(user => (
                 <div key={user.id} className="bg-[var(--color-surface)] p-3 rounded-lg border border-[var(--color-border)] flex items-center justify-between group">
                   <div className="flex items-center gap-3">
                     <div className="size-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
@@ -92,6 +107,14 @@ export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalP
                 </div>
               ))}
             </div>
+            <Pagination
+              page={currentAssignedPage}
+              pageSize={PAGE_SIZE}
+              total={partnerUsers.length}
+              onPageChange={setAssignedPage}
+              itemLabel="tài khoản đã gán"
+              ariaLabel="Phân trang tài khoản đã gán"
+            />
           </div>
 
           {/* Available Users */}
@@ -117,7 +140,7 @@ export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalP
                 <div className="h-full flex flex-col items-center justify-center text-[var(--color-text-muted)] italic text-xs p-4 text-center">
                   Không tìm thấy tài khoản "PARTNER" chưa gán.
                 </div>
-              ) : unlinkedUsers.map(user => (
+              ) : paginatedUnlinkedUsers.map(user => (
                 <div key={user.id} className="bg-[var(--color-surface)] p-2 rounded-lg border border-[var(--color-border)] flex items-center justify-between hover:border-[var(--color-primary)] transition-colors">
                   <div className="flex items-center gap-2">
                     <div className="size-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold text-[10px]">
@@ -137,6 +160,14 @@ export default function PartnerLinkModal({ partner, onClose }: PartnerLinkModalP
                 </div>
               ))}
             </div>
+            <Pagination
+              page={currentAvailablePage}
+              pageSize={PAGE_SIZE}
+              total={unlinkedUsers.length}
+              onPageChange={setAvailablePage}
+              itemLabel="tài khoản khả dụng"
+              ariaLabel="Phân trang tài khoản khả dụng"
+            />
             <p className="text-[10px] text-[var(--color-text-muted)] italic leading-tight">
               * Chỉ các tài khoản có role <span className="font-bold text-indigo-600">PARTNER</span> mới xuất hiện trong danh sách này.
             </p>

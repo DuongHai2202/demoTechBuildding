@@ -9,13 +9,31 @@ export interface Contract {
   contractValue: number;
   workflowStep: number; // 1-7
   guaranteeInfo?: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'TERMINATED' | 'PENDING';
+  status: 'ACTIVE' | 'EXPIRED' | 'TERMINATED' | 'PENDING' | 'COMPLETED';
   fileUrl?: string;
   type?: 'MAIN' | 'ADDENDUM';
   parentId?: number;
   signedDate?: string;
   startDate?: string;
   endDate?: string;
+}
+
+export interface ContractWorkflowStepDefinition {
+  step: number;
+  label: string;
+  description: string;
+  owner: string;
+  requirement: string;
+}
+
+export interface ContractWorkflowHistory {
+  id: number;
+  fromStep?: number;
+  toStep: number;
+  action: 'INITIAL' | 'ADVANCE' | 'RETURN' | string;
+  note?: string;
+  changedBy: string;
+  createdAt: string;
 }
 
 export interface CreateContractRequest {
@@ -38,7 +56,7 @@ export interface CreateContractRequest {
 export interface BoqItem {
   id: number;
   contractId: number;
-  itemCode: string;
+  itemCode?: string;
   description: string;
   unit: string;
   quantity: number;
@@ -47,20 +65,20 @@ export interface BoqItem {
   vatRate: number;
   vatAmount: number;
   totalWithVat: number;
-  parentId?: number;
+  parentId?: number | null;
   parentCode?: string;
   bimId?: string;
 }
 
 export interface BoqItemRequest {
   contractId: number;
-  itemCode: string;
+  itemCode?: string;
   description: string;
   unit?: string;
   quantity?: number;
   unitPrice?: number;
   vatRate?: number;
-  parentId?: number;
+  parentId?: number | null;
   bimId?: string;
 }
 
@@ -88,7 +106,7 @@ export interface Drawing {
   projectId: number;
   contractId?: number;
   name: string;
-  drawingNumber: string;
+  drawingNumber?: string;
   fileUrl: string;
   version: string;
 }

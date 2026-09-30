@@ -1,20 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProjects } from '../../features/projects/api/projectApi';
 import { AttendanceAdminList } from '../../features/attendance/components/AttendanceAdminList';
+import { ShiftAssignmentPanel } from '../../features/attendance/components/ShiftAssignmentPanel';
 import { 
   BuildingOffice2Icon, 
   ChevronRightIcon 
 } from '@heroicons/react/24/outline';
+import { Pagination } from '../../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 export default function AttendanceManagementPage() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [projectSearch, setProjectSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const filteredProjects = projects?.filter(p => 
     p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
     p.projectCode?.toLowerCase().includes(projectSearch.toLowerCase())
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [projectSearch]);
+
+  const projectList = filteredProjects || [];
+  const totalPages = Math.max(1, Math.ceil(projectList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedProjects = projectList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   if (projectsLoading) {
     return (
@@ -27,8 +41,8 @@ export default function AttendanceManagementPage() {
   const selectedProject = projects?.find(p => p.id === selectedProjectId);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-2 border-b border-[var(--color-border)] pb-4">
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Quản lý Chấm công</h1>
         <p className="text-sm text-[var(--color-text-muted)]">
           Theo dõi nhật ký vào/ra và các lượt xác thực thất bại trên toàn hệ thống.
@@ -39,7 +53,7 @@ export default function AttendanceManagementPage() {
       {!selectedProjectId ? (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
            {/* Search & Filter bar */}
-           <div className="bg-[var(--color-surface)] p-4 rounded-xl border border-[var(--color-border)] shadow-sm flex items-center gap-4">
+           <div className="flex items-center gap-4 border-y border-[var(--color-border)] py-3">
               <div className="relative flex-1">
                 <input 
                   type="text" 
@@ -58,7 +72,7 @@ export default function AttendanceManagementPage() {
            </div>
 
            {/* Projects List */}
-           <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] overflow-hidden shadow-sm">
+           <div className="overflow-hidden border-y border-[var(--color-border)] bg-[var(--color-surface)]">
              <div className="overflow-x-auto">
                <table className="w-full text-left text-sm">
                  <thead className="bg-[var(--color-surface-alt)] border-b border-[var(--color-border)]">
@@ -75,7 +89,7 @@ export default function AttendanceManagementPage() {
                         <td colSpan={4} className="px-6 py-10 text-center text-slate-400 italic">Không tìm thấy dự án nào khớp với từ khóa.</td>
                       </tr>
                     ) : (
-                      filteredProjects?.map(project => (
+                      paginatedProjects.map(project => (
                         <tr key={project.id} className="hover:bg-[var(--color-bg)] transition-colors group">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -106,10 +120,18 @@ export default function AttendanceManagementPage() {
                  </tbody>
                </table>
              </div>
+           <Pagination
+             page={currentPage}
+             pageSize={PAGE_SIZE}
+             total={projectList.length}
+             onPageChange={setPage}
+             itemLabel="dự án"
+             ariaLabel="Phân trang dự án chấm công"
+           />
            </div>
         </div>
       ) : (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="space-y-4 animate-in fade-in duration-500">
           {/* Breadcrumb back */}
           <div className="flex items-center gap-2">
             <button 
@@ -125,26 +147,23 @@ export default function AttendanceManagementPage() {
             <span className="text-sm font-bold text-[var(--color-text-primary)]">{selectedProject?.name}</span>
           </div>
 
-          <div className="bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dark,var(--color-primary))] p-6 rounded-2xl text-white shadow-[var(--shadow-modal-theme)] border border-white/10 flex items-center justify-between relative overflow-hidden group">
-            {/* Decorative background element */}
-            <div className="absolute -right-10 -top-10 size-40 bg-white/10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-700" />
-            
-            <div className="flex items-center gap-4 relative z-10">
-              <div className="p-3 bg-white/20 backdrop-blur-md rounded-xl border border-white/20 shadow-inner">
-                <BuildingOffice2Icon className="size-6 text-white" />
+          <div className="flex items-center justify-between gap-4 border-y border-[var(--color-border)] py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)]">
+                <BuildingOffice2Icon className="size-5" />
               </div>
               <div>
-                <span className="block text-[10px] uppercase font-black opacity-70 tracking-[0.2em] mb-0.5">Đang xem nhật ký từ dự án</span>
-                <h2 className="font-black text-xl tracking-tight">{selectedProject?.name}</h2>
+                <span className="block text-xs font-medium text-[var(--color-text-muted)]">Đang xem nhật ký từ dự án</span>
+                <h2 className="truncate text-lg font-bold text-[var(--color-text-primary)]">{selectedProject?.name}</h2>
               </div>
             </div>
-            
-            <div className="text-right relative z-10">
-              <span className="block text-[10px] uppercase font-black opacity-70 tracking-[0.2em] mb-0.5">Mã dự án</span>
-              <span className="font-mono text-2xl font-black tracking-tighter text-white drop-shadow-sm">{selectedProject?.projectCode || 'N/A'}</span>
+            <div className="shrink-0 text-right">
+              <span className="block text-xs text-[var(--color-text-muted)]">Mã dự án</span>
+              <span className="font-mono text-sm font-bold text-[var(--color-text-primary)]">{selectedProject?.projectCode || 'N/A'}</span>
             </div>
           </div>
 
+          <ShiftAssignmentPanel projectId={selectedProjectId} />
           <AttendanceAdminList projectId={selectedProjectId} />
         </div>
       )}

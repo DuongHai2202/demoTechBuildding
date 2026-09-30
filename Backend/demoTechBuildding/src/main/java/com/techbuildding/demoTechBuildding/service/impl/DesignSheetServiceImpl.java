@@ -11,6 +11,9 @@ import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.repository.ZoneRepository;
 import com.techbuildding.demoTechBuildding.service.DesignSheetService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +29,7 @@ public class DesignSheetServiceImpl implements DesignSheetService {
     private final ProjectRepository projectRepository;
     private final ZoneRepository zoneRepository;
     private final UserRepository userRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     @Transactional
@@ -45,10 +49,17 @@ public class DesignSheetServiceImpl implements DesignSheetService {
                     .orElseThrow(() -> new RuntimeException("User not found: " + request.getIssuedBy()));
         }
 
+        String sheetNumber = codeGenerator.cleanProvidedCode(request.getSheetNumber());
+        if (sheetNumber == null) {
+            sheetNumber = codeGenerator.next(StandardCodeType.DESIGN_SHEET, designSheetRepository::existsBySheetNumber);
+        } else if (designSheetRepository.existsBySheetNumber(sheetNumber)) {
+            throw new DuplicateResourceException("Mã bản vẽ '" + sheetNumber + "' đã tồn tại.");
+        }
+
         DesignSheet sheet = DesignSheet.builder()
                 .project(project)
                 .zone(zone)
-                .sheetNumber(request.getSheetNumber())
+                .sheetNumber(sheetNumber)
                 .title(request.getTitle())
                 .discipline(request.getDiscipline())
                 .revision(request.getRevision())

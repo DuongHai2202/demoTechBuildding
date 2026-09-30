@@ -3,6 +3,7 @@ package com.techbuildding.demoTechBuildding.controller;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckInRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.Project;
@@ -125,6 +126,19 @@ public class AttendanceController {
 
         AttendanceResponseDTO result = attendanceService.getTodayRecord(userId, projectId);
         return new ResponseData<>(HttpStatus.OK.value(), "Success", result);
+    }
+
+    @Operation(summary = "Review overtime", description = "Approve all or part of the calculated overtime, or reject it with a reason. Only ADMIN/PM can review.")
+    @PatchMapping("/{attendanceId}/overtime")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PM')")
+    public ResponseData<AttendanceResponseDTO> reviewOvertime(
+            @Parameter(description = "Attendance log ID") @PathVariable("attendanceId") Long attendanceId,
+            @Valid @RequestBody OvertimeReviewRequestDTO request) {
+
+        log.info("Overtime review request: attendanceId={}, status={}, approvedMinutes={}",
+                attendanceId, request.getStatus(), request.getApprovedMinutes());
+        AttendanceResponseDTO result = attendanceService.reviewOvertime(attendanceId, request);
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã cập nhật xử lý tăng ca.", result);
     }
 
     @Operation(summary = "Get all attendance logs", description = "Get all attendance logs across all projects within a date range.")

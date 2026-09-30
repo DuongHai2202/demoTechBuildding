@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMasterPlan, useMyProjectPermission } from '../api/projectApi';
 import type { MasterPlanItem } from '../types/masterPlan.types';
 import { 
@@ -12,6 +12,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { LoadingSkeleton } from '../../../components/LoadingSkeleton';
 import { MasterPlanForm } from './MasterPlanForm';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 interface MasterPlanListProps {
   projectId: number;
@@ -21,7 +24,17 @@ export function MasterPlanList({ projectId }: MasterPlanListProps) {
   const { data: items, isLoading } = useMasterPlan(projectId);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [showForm, setShowForm] = useState(false);
+  const [page, setPage] = useState(1);
   const permissions = useMyProjectPermission(projectId);
+  const itemList = items || [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [itemList.length]);
+
+  const totalPages = Math.max(1, Math.ceil(itemList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedItems = itemList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const toggleExpand = (id: number) => {
     const next = new Set(expandedItems);
@@ -76,7 +89,7 @@ export function MasterPlanList({ projectId }: MasterPlanListProps) {
         </div>
         
         <div className="divide-y divide-[var(--color-border)]">
-          {items?.map(item => (
+          {paginatedItems.map(item => (
             <MasterPlanRow 
               key={item.id} 
               item={item} 
@@ -86,12 +99,20 @@ export function MasterPlanList({ projectId }: MasterPlanListProps) {
               projectId={projectId}
             />
           ))}
-          {(!items || items.length === 0) && (
+          {itemList.length === 0 && (
             <div className="p-12 text-center text-[var(--color-text-muted)]">
               Chưa có kế hoạch công việc nào được thiết lập.
             </div>
           )}
         </div>
+        <Pagination
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          total={itemList.length}
+          onPageChange={setPage}
+          itemLabel="công việc"
+          ariaLabel="Phân trang kế hoạch tổng thể"
+        />
       </div>
     </div>
   );

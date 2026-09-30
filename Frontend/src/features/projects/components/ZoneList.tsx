@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useZones, useDeleteZone, useMyProjectPermission } from '../api/projectApi';
 import { 
   MagnifyingGlassIcon, 
@@ -10,12 +10,17 @@ import {
 } from '@heroicons/react/24/outline';
 import { ZoneForm } from './ZoneForm';
 import type { Zone } from '../types/project.types';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 export function ZoneList({ projectId }: { projectId: number }) {
   const { data: zones, isLoading } = useZones(projectId);
   const [search, setSearch] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [showRootForm, setShowRootForm] = useState(false);
+  const [page, setPage] = useState(1);
   const permissions = useMyProjectPermission(projectId);
 
   const toggleExpand = (id: number) => {
@@ -29,6 +34,14 @@ export function ZoneList({ projectId }: { projectId: number }) {
     z.name?.toLowerCase().includes(search.toLowerCase()) ||
     z.zoneCode?.toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedZones = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -73,7 +86,7 @@ export function ZoneList({ projectId }: { projectId: number }) {
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center text-sm text-[var(--color-text-muted)]">Chưa có phân khu nào được thiết lập.</div>
           ) : (
-            filtered.map(zone => (
+            paginatedZones.map(zone => (
               <ZoneRow 
                 key={zone.id} 
                 zone={zone} 
@@ -85,6 +98,14 @@ export function ZoneList({ projectId }: { projectId: number }) {
             ))
           )}
         </div>
+        <Pagination
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          total={filtered.length}
+          onPageChange={setPage}
+          itemLabel="phân khu"
+          ariaLabel="Phân trang phân khu"
+        />
       </div>
     </div>
   );
@@ -99,6 +120,7 @@ interface RowProps {
 }
 
 function ZoneRow({ zone, level, expandedIds, toggleExpand, projectId }: RowProps) {
+  const { confirm } = useActionDialog();
   const isExpanded = expandedIds.has(zone.id);
   const hasChildren = zone.children && zone.children.length > 0;
   const [showAddChild, setShowAddChild] = useState(false);
@@ -139,7 +161,14 @@ function ZoneRow({ zone, level, expandedIds, toggleExpand, projectId }: RowProps
                 <PlusIcon className="size-3.5" />
               </button>
               <button 
-                onClick={() => { if(confirm('Xóa vị trí này và tất cả con?')) deleteZone.mutate(zone.id); }}
+                onClick={async () => {
+                  if (await confirm({
+                    title: 'Xóa vị trí công trình',
+                    description: 'Vị trí này và toàn bộ vị trí con sẽ bị xóa. Bạn có chắc muốn tiếp tục?',
+                    confirmLabel: 'Xóa vị trí',
+                    variant: 'danger',
+                  })) deleteZone.mutate(zone.id);
+                }}
                 className="p-1 rounded text-rose-500 hover:bg-rose-50"
                 title="Xóa"
               >

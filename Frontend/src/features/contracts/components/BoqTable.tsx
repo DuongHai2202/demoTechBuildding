@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { BoqItem } from '../types/contract.types';
 import { NormEditor } from '../../materials/components/NormEditor';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 
 interface BoqTableProps {
   contractId: number;
@@ -23,6 +24,7 @@ function formatCurrency(value: number | undefined) {
 }
 
 export function BoqTable({ contractId }: BoqTableProps) {
+  const { confirm } = useActionDialog();
   const { data: items, isLoading } = useBoqItems(contractId);
   const deleteMutation = useDeleteBoqItem(contractId);
   const [search, setSearch] = useState('');
@@ -30,8 +32,13 @@ export function BoqTable({ contractId }: BoqTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedBoqItem, setSelectedBoqItem] = useState<{ id: number; name: string } | null>(null);
 
-  const handleDelete = (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa hạng mục này? Mọi hạng mục con (nếu có) cũng sẽ bị xóa.')) {
+  const handleDelete = async (id: number) => {
+    if (await confirm({
+      title: 'Xóa hạng mục BOQ',
+      description: 'Hạng mục này và các hạng mục con (nếu có) sẽ bị xóa. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa hạng mục',
+      variant: 'danger',
+    })) {
       deleteMutation.mutate(id);
     }
   };

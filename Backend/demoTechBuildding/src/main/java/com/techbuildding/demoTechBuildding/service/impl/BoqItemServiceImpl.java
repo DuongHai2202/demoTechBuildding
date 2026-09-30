@@ -7,6 +7,10 @@ import com.techbuildding.demoTechBuildding.entity.Contract;
 import com.techbuildding.demoTechBuildding.repository.BoqItemRepository;
 import com.techbuildding.demoTechBuildding.repository.ContractRepository;
 import com.techbuildding.demoTechBuildding.service.BoqItemService;
+import com.techbuildding.demoTechBuildding.exception.BadRequestException;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,16 +24,27 @@ public class BoqItemServiceImpl implements BoqItemService {
 
     private final BoqItemRepository boqItemRepository;
     private final ContractRepository contractRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     public BoqItemResponseDTO createBoqItem(BoqItemRequestDTO request) {
         Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new RuntimeException("Contract not found: " + request.getContractId()));
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy hợp đồng để thêm hạng mục."));
 
         BoqItem parent = null;
         if (request.getParentId() != null) {
             parent = boqItemRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new RuntimeException("Parent BOQ item not found: " + request.getParentId()));
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy hạng mục cha đã chọn."));
+            if (parent.getContract() == null || !contract.getId().equals(parent.getContract().getId())) {
+                throw new BadRequestException("Hạng mục cha phải thuộc cùng hợp đồng hiện tại.");
+            }
+        }
+
+        String itemCode = codeGenerator.cleanProvidedCode(request.getItemCode());
+        if (itemCode == null) {
+            itemCode = codeGenerator.next(StandardCodeType.BOQ_ITEM, boqItemRepository::existsByItemCode);
+        } else if (boqItemRepository.existsByItemCode(itemCode)) {
+            throw new DuplicateResourceException("Mã hạng mục '" + itemCode + "' đã tồn tại.");
         }
 
         BigDecimal unitPrice = request.getUnitPrice() != null ? request.getUnitPrice() : BigDecimal.ZERO;
@@ -42,7 +57,7 @@ public class BoqItemServiceImpl implements BoqItemService {
 
         BoqItem item = BoqItem.builder()
                 .contract(contract)
-                .itemCode(request.getItemCode())
+                .itemCode(itemCode)
                 .description(request.getDescription())
                 .unit(request.getUnit())
                 .quantity(request.getQuantity())

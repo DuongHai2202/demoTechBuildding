@@ -2,8 +2,13 @@ import { Navigate, Outlet } from 'react-router-dom';
 
 import { useAuthStore } from '../features/auth/stores/authStore';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
+import { hasPermission, type Permission } from '../features/auth/authorization';
 
-export function ProtectedRoute() {
+interface RouteGuardProps {
+  permission?: Permission;
+}
+
+export function ProtectedRoute({ permission }: RouteGuardProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
@@ -28,5 +33,14 @@ export function ProtectedRoute() {
     return <Navigate to="/pending-approval" replace />;
   }
 
+  if (permission && !hasPermission(user, permission)) {
+    return <Navigate to="/forbidden" replace />;
+  }
+
   return <Outlet />;
+}
+
+export function PermissionRoute({ permission }: { permission: Permission }) {
+  const user = useAuthStore((s) => s.user);
+  return hasPermission(user, permission) ? <Outlet /> : <Navigate to="/forbidden" replace />;
 }

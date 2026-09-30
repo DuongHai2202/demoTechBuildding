@@ -9,11 +9,23 @@ import { useProjects } from '../features/projects/api/projectApi';
 export default function AttendancePage() {
   const user = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState<'checkin' | 'history'>('checkin');
-  const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<number | ''>(() => {
+    const storedProjectId = Number(sessionStorage.getItem('attendance_return_project'));
+    return Number.isInteger(storedProjectId) && storedProjectId > 0 ? storedProjectId : '';
+  });
 
   const { position } = useGeolocation();
   const { data: projects } = useProjects();
   const selectedProject = projects?.find(p => p.id === Number(selectedProjectId));
+
+  const handleProjectChange = (projectId: number | '') => {
+    setSelectedProjectId(projectId);
+    if (projectId) {
+      sessionStorage.setItem('attendance_return_project', String(projectId));
+    } else {
+      sessionStorage.removeItem('attendance_return_project');
+    }
+  };
 
   const isOnlyGuest = user?.roles?.length === 1 && user.roles[0] === 'GUEST';
 
@@ -70,7 +82,7 @@ export default function AttendancePage() {
           <div className="lg:col-span-2">
             <CheckInForm 
               selectedProjectId={selectedProjectId} 
-              onProjectChange={setSelectedProjectId} 
+              onProjectChange={handleProjectChange}
             />
           </div>
           

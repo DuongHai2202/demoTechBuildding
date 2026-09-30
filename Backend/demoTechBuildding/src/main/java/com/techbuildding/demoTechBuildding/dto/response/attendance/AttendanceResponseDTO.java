@@ -25,6 +25,22 @@ public class AttendanceResponseDTO implements Serializable {
     private Integer projectId;
     private String projectName;
 
+    // Planned shift snapshot
+    private Long shiftAssignmentId;
+    private String shiftCode;
+    private String shiftName;
+    private LocalDateTime scheduledStartAt;
+    private LocalDateTime scheduledEndAt;
+    private Integer breakMinutes;
+    private Long lateMinutes;
+    private Long earlyLeaveMinutes;
+    private Long overtimeMinutes;
+    private String overtimeStatus;
+    private Long overtimeApprovedMinutes;
+    private String overtimeReviewedBy;
+    private LocalDateTime overtimeReviewedAt;
+    private String overtimeReviewNote;
+
     // Check-in
     private LocalDateTime checkInAt;
     private BigDecimal gpsLatIn;
@@ -39,10 +55,15 @@ public class AttendanceResponseDTO implements Serializable {
 
     // Summary
     private Float distanceInMeters;
+    private Float distanceOutMeters;
+    private Double gpsAccuracyIn;
+    private Double gpsAccuracyOut;
     private String status;
 
-    // Computed: total working hours
+    // Computed duration. Minutes are the authoritative display/calculation unit.
+    private Long workingMinutes;
     private Double workingHours;
+    private String durationText;
 
     private String remarks;
 }

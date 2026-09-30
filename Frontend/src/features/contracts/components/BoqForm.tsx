@@ -2,17 +2,21 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCreateBoqItem, useBoqItems } from '../api/contractApi';
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { InformationCircleIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  itemCode: z.string().min(1, 'Mã hạng mục là bắt buộc'),
-  description: z.string().min(1, 'Tên/Mô tả là bắt buộc'),
-  unit: z.string().min(1, 'Đơn vị tính là bắt buộc'),
-  quantity: z.coerce.number().min(0, 'Số lượng không hợp lệ'),
-  unitPrice: z.coerce.number().min(0, 'Đơn giá không hợp lệ'),
-  vatRate: z.coerce.number().min(0, 'Thuế suất VAT không hợp lệ'),
-  parentId: z.coerce.number().optional().nullable(),
-  bimId: z.string().optional(),
+  itemCode: optionalCode(),
+  description: requiredText('Tên/Mô tả phải có ít nhất 2 ký tự', 2),
+  unit: requiredText('Đơn vị tính là bắt buộc'),
+  quantity: z.coerce.number().finite('Số lượng phải là số hợp lệ').min(0, 'Số lượng không được âm'),
+  unitPrice: z.coerce.number().finite('Đơn giá phải là số hợp lệ').min(0, 'Đơn giá không được âm'),
+  vatRate: z.coerce.number().finite('Thuế suất VAT phải là số').min(0, 'Thuế suất VAT từ 0 đến 100%').max(100, 'Thuế suất VAT từ 0 đến 100%'),
+  parentId: z.preprocess(
+    (value) => value === '' || value == null ? null : value,
+    z.coerce.number().int().positive().nullable().optional(),
+  ),
+  bimId: optionalText(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -32,6 +36,7 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
     resolver: zodResolver(schema) as any,
     defaultValues: {
       vatRate: 10,
+      parentId: null,
     }
   });
 
@@ -39,7 +44,7 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
     try {
       await createMutation.mutateAsync({
         ...data,
-        parentId: data.parentId || undefined,
+        parentId: data.parentId ?? null,
         contractId
       });
       onClose();
@@ -65,23 +70,30 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Hạng mục cha (Tùy chọn)</label>
           <select
             {...register('parentId')}
+            aria-describedby="boq-parent-help"
             className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
           >
-            <option value="">-- Không có (Hạng mục gốc) --</option>
+            <option value="">Không có — tạo hạng mục gốc (cấp 1)</option>
             {parentCandidates.map(p => (
               <option key={p.id} value={p.id}>
                 {p.itemCode} - {p.description}
               </option>
             ))}
           </select>
+          <div id="boq-parent-help" className="mt-2 flex items-start gap-2 rounded-lg border border-[var(--color-primary)]/15 bg-[var(--color-primary-light)] px-3 py-2 text-xs leading-5 text-[var(--color-text-secondary)]">
+            <InformationCircleIcon className="mt-0.5 size-4 shrink-0 text-[var(--color-primary)]" />
+            <p>{parentCandidates.length === 0
+              ? 'Chưa có hạng mục cha. Giữ lựa chọn này để tạo hạng mục gốc đầu tiên; sau khi lưu, hạng mục đó sẽ xuất hiện để chọn làm cha.'
+              : 'Nếu đây là hạng mục cấp 1, giữ lựa chọn “Không có”. Chỉ chọn hạng mục cha khi đang tạo công việc con.'}</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Mã hạng mục <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Mã hạng mục <span className="text-xs font-normal text-[var(--color-text-muted)]">(để trống để tự sinh)</span></label>
             <input 
               {...register('itemCode')}
-              placeholder="VD: HM01"
+              placeholder="Tự động: BOQ-2026-0001 hoặc nhập mã riêng"
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
             {errors.itemCode && <p className="text-xs text-red-500 mt-1">{errors.itemCode.message}</p>}
@@ -112,6 +124,7 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
             <input 
               type="number"
               step="any"
+              min="0"
               {...register('quantity')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
@@ -124,6 +137,8 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Đơn giá (VND) <span className="text-red-500">*</span></label>
             <input 
               type="number"
+              min="0"
+              step="1"
               {...register('unitPrice')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
@@ -133,7 +148,9 @@ export function BoqForm({ contractId, onClose }: BoqFormProps) {
             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Thuế VAT (%) <span className="text-red-500">*</span></label>
             <input 
               type="number"
-              step="any"
+              min="0"
+              max="100"
+              step="0.01"
               {...register('vatRate')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />

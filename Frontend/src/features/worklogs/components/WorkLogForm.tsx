@@ -4,13 +4,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCreateWorkLog } from '../api/worklogApi';
 import { useAuthStore } from '../../auth/stores/authStore';
+import { toast } from 'sonner';
 import { PhotoIcon, XMarkIcon, CloudIcon, UsersIcon, ChatBubbleBottomCenterTextIcon, PlusIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { isValidDateValue, requiredDate, requiredNumber, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  logDate: z.string().min(1, 'Vui lòng chọn ngày'),
-  content: z.string().min(10, 'Nội dung phải ít nhất 10 ký tự'),
-  weatherCondition: z.string().min(1, 'Vui lòng nhập tình hình thời tiết'),
-  workerCount: z.number().min(0, 'Số lượng nhân công không hợp lệ'),
+  logDate: requiredDate().refine(isValidDateValue, 'Ngày ghi nhật ký không hợp lệ'),
+  content: requiredText('Nội dung phải ít nhất 10 ký tự', 10),
+  weatherCondition: requiredText('Vui lòng nhập tình hình thời tiết'),
+  workerCount: requiredNumber('Số lượng nhân công phải là số nguyên không âm', 0, 100000).int('Số lượng nhân công phải là số nguyên'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -38,6 +40,18 @@ export function WorkLogForm({ projectId, onSuccess }: WorkLogFormProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
+      const invalidFile = newFiles.find(file => !file.type.startsWith('image/'));
+      const oversizedFile = newFiles.find(file => file.size > 10 * 1024 * 1024);
+      if (invalidFile) {
+        toast.error('Chỉ được chọn file hình ảnh cho nhật ký công trường.');
+        e.target.value = '';
+        return;
+      }
+      if (oversizedFile) {
+        toast.error('Mỗi ảnh nhật ký không được vượt quá 10 MB.');
+        e.target.value = '';
+        return;
+      }
       setSelectedFiles(prev => [...prev, ...newFiles]);
       
       const newPreviews = newFiles.map(file => URL.createObjectURL(file));
@@ -90,7 +104,7 @@ export function WorkLogForm({ projectId, onSuccess }: WorkLogFormProps) {
         <div>
           <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-1.5 flex items-center gap-2">
             <CalendarIcon className="w-4 h-4 text-indigo-500" />
-            Ngày ghi nhật ký
+            Ngày ghi nhật ký <span className="text-red-500">*</span>
           </label>
           <input
             type="date"
@@ -107,7 +121,7 @@ export function WorkLogForm({ projectId, onSuccess }: WorkLogFormProps) {
         <div>
           <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-1.5 flex items-center gap-2">
             <CloudIcon className="w-4 h-4 text-sky-500" />
-            Tình hình thời tiết
+            Tình hình thời tiết <span className="text-red-500">*</span>
           </label>
           <input
             {...register('weatherCondition')}
@@ -124,10 +138,13 @@ export function WorkLogForm({ projectId, onSuccess }: WorkLogFormProps) {
         <div>
           <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-1.5 flex items-center gap-2">
             <UsersIcon className="w-4 h-4 text-emerald-500" />
-            Số lượng nhân công
+            Số lượng nhân công <span className="text-red-500">*</span>
           </label>
           <input
             type="number"
+            min="0"
+            max="100000"
+            step="1"
             {...register('workerCount', { valueAsNumber: true })}
             className={`w-full p-2.5 rounded-lg border bg-[var(--color-bg)] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition-all focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 ${
               errors.workerCount ? 'border-red-500' : 'border-[var(--color-border)]'
@@ -142,7 +159,7 @@ export function WorkLogForm({ projectId, onSuccess }: WorkLogFormProps) {
       <div>
         <label className="block text-sm font-semibold text-[var(--color-text-primary)] mb-1.5 flex items-center gap-2">
           <ChatBubbleBottomCenterTextIcon className="w-4 h-4 text-[var(--color-primary)]" />
-          Nội dung công việc
+          Nội dung công việc <span className="text-red-500">*</span>
         </label>
         <textarea
           {...register('content')}

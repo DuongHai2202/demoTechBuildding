@@ -1,16 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRfi, useRfiComments, useAddRfiComment, useUpdateRfiStatus } from '../api/rfiApi';
 import { XMarkIcon, PaperAirplaneIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { useAuthStore } from '../../auth/stores/authStore';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const COMMENT_PAGE_SIZE = 10;
 
 export function RfiDetailModal({ rfiId, onClose }: { rfiId: number, onClose: () => void }) {
+  const { confirm } = useActionDialog();
   const { data: rfi, isLoading } = useRfi(rfiId);
   const { data: comments } = useRfiComments(rfiId);
   const addComment = useAddRfiComment();
   const updateStatus = useUpdateRfiStatus();
   const [newComment, setNewComment] = useState('');
+  const [commentPage, setCommentPage] = useState(1);
   const currentUser = useAuthStore(state => (state as any).user);
+  const commentList = comments || [];
+  const totalCommentPages = Math.max(1, Math.ceil(commentList.length / COMMENT_PAGE_SIZE));
+  const currentCommentPage = Math.min(commentPage, totalCommentPages);
+  const paginatedComments = commentList.slice((currentCommentPage - 1) * COMMENT_PAGE_SIZE, currentCommentPage * COMMENT_PAGE_SIZE);
+
+  useEffect(() => {
+    setCommentPage(1);
+  }, [rfiId, comments?.length]);
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,8 +39,13 @@ export function RfiDetailModal({ rfiId, onClose }: { rfiId: number, onClose: () 
     });
   };
 
-  const handleResolve = () => {
-    if (confirm('Đánh dấu RFI này đã giải quyết?')) {
+  const handleResolve = async () => {
+    if (await confirm({
+      title: 'Đánh dấu RFI đã giải quyết',
+      description: 'RFI sẽ chuyển sang trạng thái đã giải quyết. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Đánh dấu đã giải quyết',
+      variant: 'success',
+    })) {
       updateStatus.mutate({ id: rfiId, status: 'RESOLVED' });
     }
   };
@@ -91,26 +110,38 @@ export function RfiDetailModal({ rfiId, onClose }: { rfiId: number, onClose: () 
           <div className="space-y-4 pt-4 border-t border-[var(--color-border)]">
             <h4 className="text-sm font-bold text-[var(--color-text-primary)]">Thảo luận kỹ thuật</h4>
             <div className="space-y-4">
-              {comments?.map(comment => (
-                <div key={comment.id} className="flex gap-3">
-                  <div className="size-8 rounded-full bg-[var(--color-surface-alt)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
-                    {comment.userAvatar ? (
-                      <img src={comment.userAvatar} className="size-full rounded-full object-cover" />
-                    ) : (
-                      <span className="text-xs font-bold text-[var(--color-text-secondary)]">{comment.userName.charAt(0)}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-[var(--color-text-primary)]">{comment.userName}</span>
-                      <span className="text-[10px] text-[var(--color-text-muted)]">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+              {commentList.length === 0 ? (
+                <p className="text-sm text-[var(--color-text-muted)] italic">Chưa có trao đổi nào.</p>
+              ) : (
+                paginatedComments.map(comment => (
+                  <div key={comment.id} className="flex gap-3">
+                    <div className="size-8 rounded-full bg-[var(--color-surface-alt)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                      {comment.userAvatar ? (
+                        <img src={comment.userAvatar} className="size-full rounded-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-[var(--color-text-secondary)]">{comment.userName.charAt(0)}</span>
+                      )}
                     </div>
-                    <div className="rounded-2xl rounded-tl-none bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text-secondary)]">
-                      {comment.content}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-[var(--color-text-primary)]">{comment.userName}</span>
+                        <span className="text-[10px] text-[var(--color-text-muted)]">{new Date(comment.createdAt).toLocaleString('vi-VN')}</span>
+                      </div>
+                      <div className="rounded-2xl rounded-tl-none bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text-secondary)]">
+                        {comment.content}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
+              <Pagination
+                page={currentCommentPage}
+                pageSize={COMMENT_PAGE_SIZE}
+                total={commentList.length}
+                onPageChange={setCommentPage}
+                itemLabel="trao đổi"
+                ariaLabel="Phân trang thảo luận kỹ thuật"
+              />
             </div>
           </div>
         </div>

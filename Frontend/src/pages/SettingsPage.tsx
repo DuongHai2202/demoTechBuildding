@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   UserCircleIcon,
   PaintBrushIcon,
@@ -9,14 +10,25 @@ import {
   ComputerDesktopIcon,
   CheckIcon,
   PencilSquareIcon,
+  CameraIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../features/auth/stores/authStore';
+import { FaceRegistrationModal } from '../features/auth/components/FaceRegistrationModal';
 
 type ThemeOption = 'light' | 'dark' | 'system';
 
 export default function SettingsPage() {
   const user = useAuthStore((s) => s.user);
-  const [activeSection, setActiveSection] = useState<'profile' | 'appearance' | 'security' | 'notifications'>('profile');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSection = searchParams.get('section');
+  const isValidSection = (value: string | null): value is 'profile' | 'appearance' | 'security' | 'notifications' => (
+    value === 'profile' || value === 'appearance' || value === 'security' || value === 'notifications'
+  );
+  const [activeSection, setActiveSection] = useState<'profile' | 'appearance' | 'security' | 'notifications'>(
+    isValidSection(requestedSection) ? requestedSection : 'profile'
+  );
+  const [showFaceModal, setShowFaceModal] = useState(() => searchParams.get('action') === 'register-face');
   const [theme, setTheme] = useState<ThemeOption>(() => {
     return (localStorage.getItem('techbuildding-theme') as ThemeOption) || 'system';
   });
@@ -37,6 +49,16 @@ export default function SettingsPage() {
       }
     }
   };
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'register-face') {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('action');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const returnToAttendance = searchParams.get('from') === 'attendance';
 
   const sections = [
     { key: 'profile' as const, label: 'Hồ sơ cá nhân', icon: UserCircleIcon },
@@ -130,6 +152,44 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
+
+              <div className="flex flex-col gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-light)] text-[var(--color-primary)]">
+                    <CameraIcon className="size-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--color-text-primary)]">Xác thực khuôn mặt</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">
+                      Dùng khuôn mặt đã mã hóa để xác thực khi chấm công. Không lưu ảnh gốc.
+                    </p>
+                    <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${
+                      user?.hasFaceRegistered
+                        ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                        : 'bg-amber-500/10 text-amber-700'
+                    }`}>
+                      {user?.hasFaceRegistered ? 'Đã sẵn sàng' : 'Chưa đăng ký'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFaceModal(true)}
+                  className="shrink-0 rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-bold text-white hover:opacity-90"
+                >
+                  {user?.hasFaceRegistered ? 'Cập nhật khuôn mặt' : 'Đăng ký ngay'}
+                </button>
+              </div>
+
+              {returnToAttendance && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/attendance')}
+                  className="text-left text-sm font-bold text-[var(--color-primary)] hover:underline"
+                >
+                  ← Quay lại luồng chấm công
+                </button>
+              )}
             </div>
           )}
 
@@ -210,6 +270,10 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {showFaceModal && (
+        <FaceRegistrationModal onComplete={() => setShowFaceModal(false)} />
+      )}
     </div>
   );
 }
@@ -313,7 +377,7 @@ function NotificationsPanel() {
           </div>
         </div>
         <p className="text-sm text-[var(--color-text-muted)]">
-          Tùy chỉnh cách bạn nhận thông báo từ hệ thống. Các thay đổi sẽ được áp dụng ngay lập tức.
+          Tùy chỉnh cách bạn nhận thông báo. Các lựa chọn này đang được lưu trên trình duyệt cho bản demo; danh sách thông báo vẫn được đồng bộ từ hệ thống.
         </p>
       </div>
 

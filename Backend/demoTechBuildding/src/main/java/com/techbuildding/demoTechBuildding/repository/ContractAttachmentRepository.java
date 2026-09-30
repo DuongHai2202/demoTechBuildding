@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface ContractAttachmentRepository extends JpaRepository<ContractAttachment, Integer> {
     List<ContractAttachment> findByContractIdAndIsDeletedFalse(Integer contractId);
+
+    ContractAttachment findFirstByContractIdAndIsDeletedFalseOrderByCreatedAtDesc(Integer contractId);
 }

@@ -32,12 +32,15 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
       startDate: initialData.startDate?.split('T')[0] || '',
       endDate: initialData.endDate ? initialData.endDate.split('T')[0] : '',
       status: initialData.status || 'PLANNING',
-    } as any : {
+    } : {
+      // Leave the code empty on create. The backend generates a collision-safe
+      // DA-YYYY-XXXX code at save time; users may still provide a custom code.
+      projectCode: '',
       radiusMeters: 100,
       status: 'PLANNING',
       latitude: 21.028511,
       longitude: 105.854167,
-    } as any,
+    },
   });
 
   const lat = watch('latitude') ?? 21.028511;
@@ -58,14 +61,21 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
             placeholder="Nhập tên dự án"
             error={errors.name?.message}
             {...register('name')}
+            required
           />
 
           <Input
-            label="Mã dự án"
-            placeholder="VD: DA-2024-001"
+            label={initialData ? 'Mã dự án' : 'Mã dự án (tự sinh)'}
+            placeholder={initialData ? 'Nhập mã dự án' : 'Tự sinh khi lưu (DA-YYYY-XXXX)'}
             error={errors.projectCode?.message}
+            autoComplete="off"
             {...register('projectCode')}
           />
+          <p className="-mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
+            {initialData
+              ? 'Mã hiện tại có thể chỉnh sửa nhưng không được trùng với dự án khác.'
+              : 'Để trống để hệ thống tự sinh mã chuẩn DA-YYYY-XXXX khi lưu. Bạn vẫn có thể nhập mã riêng nếu cần.'}
+          </p>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-[var(--color-text-secondary)]">
@@ -83,6 +93,7 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
             placeholder="Số nhà, Tên đường, Phường, Huyện, Thành phố..."
             error={errors.address?.message}
             {...register('address')}
+            required
           />
 
           <div className="grid grid-cols-2 gap-4">
@@ -90,6 +101,7 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
               label="Ngày bắt đầu"
               type="date"
               error={errors.startDate?.message}
+              required
               {...register('startDate')}
             />
             <Input
@@ -119,6 +131,10 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
               label="Bán kính Check-in (mét)"
               type="number"
               error={errors.radiusMeters?.message}
+              min={10}
+              max={5000}
+              step={1}
+              required
               {...register('radiusMeters', { valueAsNumber: true })}
             />
           </div>

@@ -3,6 +3,7 @@ package com.techbuildding.demoTechBuildding.security;
 import com.techbuildding.demoTechBuildding.entity.User;
 import com.techbuildding.demoTechBuildding.entity.UserHasRole;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
+import com.techbuildding.demoTechBuildding.util.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -51,7 +52,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
-                !user.isDeleted(), // enabled = not deleted
+                !user.isDeleted() && user.getStatus() == UserStatus.ACTIVE, // enabled only for usable accounts
                 true, // accountNonExpired
                 true, // credentialsNonExpired
                 true, // accountNonLocked

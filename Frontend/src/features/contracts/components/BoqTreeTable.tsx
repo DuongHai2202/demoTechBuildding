@@ -3,6 +3,7 @@ import { BoqForm } from './BoqForm';
 import { useBoqItems, useDeleteBoqItem } from '../api/contractApi';
 import { MagnifyingGlassIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, TrashIcon, CubeIcon } from '@heroicons/react/24/outline';
 import type { BoqItem } from '../types/contract.types';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 
 interface BoqTreeTableProps {
   contractId: number;
@@ -14,14 +15,20 @@ function formatCurrency(value: number | undefined) {
 }
 
 export function BoqTreeTable({ contractId }: BoqTreeTableProps) {
+  const { confirm } = useActionDialog();
   const { data: items, isLoading } = useBoqItems(contractId);
   const deleteMutation = useDeleteBoqItem(contractId);
   const [search, setSearch] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [showForm, setShowForm] = useState(false);
 
-  const handleDelete = (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa hạng mục này? Mọi hạng mục con cũng sẽ bị xóa.')) {
+  const handleDelete = async (id: number) => {
+    if (await confirm({
+      title: 'Xóa hạng mục BOQ',
+      description: 'Hạng mục này và toàn bộ hạng mục con sẽ bị xóa. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa hạng mục',
+      variant: 'danger',
+    })) {
       deleteMutation.mutate(id);
     }
   };

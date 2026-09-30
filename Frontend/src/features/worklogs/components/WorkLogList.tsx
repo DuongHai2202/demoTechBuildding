@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   useProjectWorkLogs, 
   useDeleteWorkLog,
@@ -8,6 +8,7 @@ import {
 } from '../api/worklogApi';
 import { useMyProjectPermission } from '../../projects/api/projectApi';
 import { useAuthStore } from '../../auth/stores/authStore';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 import { 
   CalendarIcon, 
   UserIcon, 
@@ -20,12 +21,16 @@ import {
   XCircleIcon,
   FaceFrownIcon
 } from '@heroicons/react/24/outline';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 6;
 
 interface WorkLogListProps {
   projectId: number;
 }
 
 export function WorkLogList({ projectId }: WorkLogListProps) {
+  const { confirm } = useActionDialog();
   const { data: logs, isLoading } = useProjectWorkLogs(projectId);
   const deleteMutation = useDeleteWorkLog();
   const checkMutation = useCheckWorkLog();
@@ -46,9 +51,24 @@ export function WorkLogList({ projectId }: WorkLogListProps) {
     actionType: null
   });
   const [actionNotes, setActionNotes] = useState('');
+  const [page, setPage] = useState(1);
+  const logList = logs || [];
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Bạn có chắc muốn xóa nhật ký này?')) {
+  useEffect(() => {
+    setPage(1);
+  }, [projectId, logList.length]);
+
+  const totalPages = Math.max(1, Math.ceil(logList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLogs = logList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const handleDelete = async (id: number) => {
+    if (await confirm({
+      title: 'Xóa nhật ký công trường',
+      description: 'Nhật ký này sẽ bị xóa khỏi dự án. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa nhật ký',
+      variant: 'danger',
+    })) {
       deleteMutation.mutate({ id, projectId });
     }
   };
@@ -105,7 +125,7 @@ export function WorkLogList({ projectId }: WorkLogListProps) {
 
   return (
     <div className="relative space-y-12 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-[var(--color-primary)]/0 before:via-[var(--color-primary)]/20 before:to-[var(--color-primary)]/0">
-      {logs.map((log) => (
+      {paginatedLogs.map((log) => (
         <div key={log.id} className="relative flex items-center justify-between md:justify-normal group">
           {/* Dot */}
           <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-[var(--color-bg)] bg-[var(--color-surface)] group-hover:bg-[var(--color-primary)] text-[var(--color-primary)] group-hover:text-white shadow-xl shrink-0 z-10">
@@ -236,6 +256,15 @@ export function WorkLogList({ projectId }: WorkLogListProps) {
           </div>
         </div>
       ))}
+
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={logList.length}
+        onPageChange={setPage}
+        itemLabel="nhật ký"
+        ariaLabel="Phân trang nhật ký thi công"
+      />
 
       {/* Action Modal (Same as Material Requests for consistency) */}
       {actionModal.isOpen && (

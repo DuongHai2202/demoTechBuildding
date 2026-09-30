@@ -3,13 +3,14 @@ import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
 import type { Partner, PartnerRequest } from '../types/partner.types';
 
-export const usePartners = () => {
+export const usePartners = (options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: ['partners'],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<Partner[]>>('/partners');
       return data.data;
     },
+    enabled: options?.enabled ?? true,
   });
 };
 

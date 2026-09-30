@@ -2,6 +2,9 @@ package com.techbuildding.demoTechBuildding.service;
 
 import com.techbuildding.demoTechBuildding.dto.request.contract.ContractRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.contract.ContractResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.request.contract.ContractWorkflowTransitionRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.response.contract.ContractWorkflowHistoryResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.contract.ContractFileDownload;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -15,7 +18,15 @@ public interface ContractService {
 
     ContractResponseDTO getContractById(Integer contractId);
 
+    ContractFileDownload downloadContractDocument(Integer contractId);
+
+    ContractFileDownload downloadContractAttachment(Integer attachmentId);
+
     ContractResponseDTO updateContract(Integer contractId, ContractRequestDTO request, MultipartFile file);
+
+    ContractResponseDTO transitionWorkflow(Integer contractId, ContractWorkflowTransitionRequestDTO request);
+
+    List<ContractWorkflowHistoryResponseDTO> getWorkflowHistory(Integer contractId);
 
     void deleteContract(Integer contractId);
 

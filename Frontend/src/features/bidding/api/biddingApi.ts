@@ -93,6 +93,8 @@ export function useSubmitBid() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.submissions(data.packageId) });
+      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.packageDetail(data.packageId) });
+      queryClient.invalidateQueries({ queryKey: [...BIDDING_KEYS.all, 'list'] });
     },
   });
 }
@@ -108,6 +110,8 @@ export function useUpdateSubmissionStatus() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.submissions(data.packageId) });
+      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.packageDetail(data.packageId) });
+      queryClient.invalidateQueries({ queryKey: [...BIDDING_KEYS.all, 'list'] });
     },
   });
 }

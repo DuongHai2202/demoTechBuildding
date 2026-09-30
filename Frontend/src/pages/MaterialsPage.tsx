@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useMaterials, useCreateMaterial, useUpdateMaterial, useDeleteMaterial, useAllMaterialRequests } from '../features/materials/api/materialApi';
 import {
   Square3Stack3DIcon,
@@ -11,8 +11,13 @@ import {
 } from '@heroicons/react/24/outline';
 import { MaterialForm } from '../features/materials/components/MaterialForm';
 import type { Material } from '../features/materials/types/material.types';
+import { useActionDialog } from '../components/ui/ActionDialog';
+import { Pagination } from '../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 export default function MaterialsPage() {
+  const { confirm } = useActionDialog();
   const { data: materials, isLoading } = useMaterials();
   const createMaterial = useCreateMaterial();
   const updateMaterial = useUpdateMaterial();
@@ -20,6 +25,7 @@ export default function MaterialsPage() {
   const { data: requests } = useAllMaterialRequests();
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
 
@@ -30,6 +36,14 @@ export default function MaterialsPage() {
       m.unit?.toLowerCase().includes(search.toLowerCase())
     );
   }, [materials, search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMaterials.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedMaterials = filteredMaterials.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const handleCreate = (data: any) => {
     createMaterial.mutate(data, {
@@ -45,8 +59,13 @@ export default function MaterialsPage() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa vật tư này không?')) {
+  const handleDelete = async (id: number) => {
+    if (await confirm({
+      title: 'Xóa vật tư',
+      description: 'Vật tư này sẽ bị xóa khỏi danh mục. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa vật tư',
+      variant: 'danger',
+    })) {
       deleteMaterial.mutate(id);
     }
   };
@@ -148,9 +167,9 @@ export default function MaterialsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredMaterials.map((m, idx) => (
+              {paginatedMaterials.map((m, idx) => (
                 <tr key={m.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-colors">
-                  <td className="px-4 py-3 text-[var(--color-text-muted)]">{idx + 1}</td>
+                  <td className="px-4 py-3 text-[var(--color-text-muted)]">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                   <td className="px-4 py-3">
                     <div className="h-10 w-10 rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-bg)]">
                       {m.imageUrl ? (
@@ -202,6 +221,15 @@ export default function MaterialsPage() {
           </table>
         )}
       </div>
+
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={filteredMaterials.length}
+        onPageChange={setPage}
+        itemLabel="vật tư"
+        ariaLabel="Phân trang kho vật tư"
+      />
 
       {/* Forms Modals */}
       {isFormOpen && (

@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 
 /**
  * Security configuration for JWT-based stateless authentication.
@@ -62,6 +63,103 @@ public class SecurityConfig {
                 // Authorization rules
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+
+                        // Account and role administration are system-admin only.
+                        // A signed-in user may only read or update their own
+                        // biometric template through the /me endpoint. This
+                        // must be declared before the admin-only /users/**
+                        // matcher below, otherwise STAFF/PM accounts receive
+                        // 403 while the attendance screen loads their face data.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/face-descriptor").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/users/me/face-descriptor").authenticated()
+                        .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/role-requests").authenticated()
+                        .requestMatchers("/api/v1/role-requests/**").hasRole("ADMIN")
+
+                        // Notifications and authenticated file downloads are available
+                        // to signed-in users; writes to storage still require an
+                        // operational role.
+                        .requestMatchers("/api/v1/notifications/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/files/download").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/files/**").hasAnyRole("ADMIN", "PM")
+
+                        // Projects: only ADMIN/PM can change the project master
+                        // data. Read access is limited to active workspace roles.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/projects/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/*/members/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/projects/*/members/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/*/members/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/*/zones/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/*/zones/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/*/slides/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/*/slides/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/*/master-plan/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/projects/*/master-plan/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/projects/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/**").hasAnyRole("ADMIN", "PM")
+
+                        // Contracts and their workflow/documents contain internal
+                        // commercial data. They are readable and editable by the
+                        // project-management role; other roles cannot call these
+                        // endpoints directly.
+                        .requestMatchers("/api/v1/contracts/**").hasAnyRole("ADMIN", "PM")
+
+                        // Tender management is PM-owned. A partner may submit a
+                        // bid, but cannot see other bidders or alter evaluation.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/bid-submissions").hasAnyRole("ADMIN", "PM", "PARTNER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bid-submissions/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/bid-submissions/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/bidding-packages", "/api/v1/bidding-packages/**").hasAnyRole("ADMIN", "PM", "PARTNER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/bidding-packages").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/bidding-packages/**").hasAnyRole("ADMIN", "PM")
+
+                        // Material catalogue is readable by operational users;
+                        // catalogue changes and approvals are PM-owned.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/materials/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers("/api/v1/materials/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/material-categories/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/material-norms/**").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers("/api/v1/material-norms/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/material-requests").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/material-requests/**").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/material-requests/**").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/material-requests/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/material-requests/**").hasAnyRole("ADMIN", "PM")
+
+                        // Field logs: staff can submit; management reviews and
+                        // removes records.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/work-logs").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/work-logs/project/**").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/work-logs").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/work-logs/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/work-logs/**").hasAnyRole("ADMIN", "PM")
+
+                        // Partners and technical standards are reference data for
+                        // the workspace; mutations remain management-only.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/partners/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers("/api/v1/partners/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/technical-standards/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers("/api/v1/technical-standards/**").hasAnyRole("ADMIN", "PM")
+
+                        // Attendance keeps its finer-grained method annotations;
+                        // this matcher prevents GUEST/PARTNER from bypassing it.
+                        .requestMatchers("/api/v1/attendance/**").hasAnyRole("ADMIN", "PM", "STAFF")
+
+                        // Shift planning is visible to operational attendance
+                        // users; creating/cancelling assignments is protected by
+                        // the controller's manager-only method annotations.
+                        .requestMatchers("/api/v1/shifts/**").hasAnyRole("ADMIN", "PM", "STAFF")
+
+                        // Supporting project modules follow the same read/write
+                        // split as the project workspace.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/drawings/**", "/api/v1/design-sheets/**", "/api/v1/bim-models/**", "/api/v1/rfis/**", "/api/v1/submissions/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/drawings/**", "/api/v1/design-sheets/**", "/api/v1/bim-models/**", "/api/v1/rfis/**", "/api/v1/submissions/**").hasAnyRole("ADMIN", "PM", "STAFF")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/drawings/**", "/api/v1/design-sheets/**", "/api/v1/bim-models/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/drawings/**", "/api/v1/design-sheets/**", "/api/v1/bim-models/**", "/api/v1/rfis/**", "/api/v1/submissions/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/drawings/**", "/api/v1/design-sheets/**", "/api/v1/bim-models/**").hasAnyRole("ADMIN", "PM")
+
                         .anyRequest().authenticated())
 
                 // Custom error responses for 401 and 403

@@ -6,13 +6,17 @@ import com.techbuildding.demoTechBuildding.dto.response.project.ProjectMemberRes
 import com.techbuildding.demoTechBuildding.dto.response.project.ProjectResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.*;
 import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.exception.ResourceNotFoundException;
 import com.techbuildding.demoTechBuildding.mapper.ProjectMapper;
 import com.techbuildding.demoTechBuildding.repository.*;
 import com.techbuildding.demoTechBuildding.service.ProjectService;
 import com.techbuildding.demoTechBuildding.util.GeoUtils;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
@@ -42,6 +46,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserRepository userRepository;
     private final ProjectMapper projectMapper;
     private final EntityManager entityManager;
+    private final StandardCodeGenerator codeGenerator;
 
     // ===== PROJECT CRUD =====
 
@@ -50,11 +55,15 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponseDTO createProject(ProjectRequestDTO request) {
         log.info("Creating project: {}", request.getName());
 
-        if (request.getProjectCode() != null && projectRepository.existsByProjectCode(request.getProjectCode())) {
-            throw new DuplicateResourceException("Mã dự án '" + request.getProjectCode() + "' đã tồn tại trong hệ thống.");
+        String projectCode = codeGenerator.cleanProvidedCode(request.getProjectCode());
+        if (projectCode == null) {
+            projectCode = codeGenerator.next(StandardCodeType.PROJECT, projectRepository::existsByProjectCode);
+        } else if (projectRepository.existsByProjectCode(projectCode)) {
+            throw new DuplicateResourceException("Mã dự án '" + projectCode + "' đã tồn tại trong hệ thống.");
         }
 
         Project project = projectMapper.toEntity(request);
+        project.setProjectCode(projectCode);
         if (project.getStatus() == null) {
             project.setStatus("PLANNING");
         }
@@ -72,7 +81,7 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponseDTO getProjectById(Integer projectId) {
         log.info("Fetching project by id: {}", projectId);
 
-        Project project = findProjectOrThrow(projectId);
+        Project project = findAccessibleProjectOrThrow(projectId);
         return projectMapper.toResponseDTO(project);
     }
 
@@ -138,8 +147,14 @@ public class ProjectServiceImpl implements ProjectService {
         // Update fields
         if (request.getName() != null)
             project.setName(request.getName());
-        if (request.getProjectCode() != null)
-            project.setProjectCode(request.getProjectCode());
+        if (request.getProjectCode() != null && !request.getProjectCode().isBlank()) {
+            String projectCode = request.getProjectCode().trim();
+            if (!projectCode.equalsIgnoreCase(project.getProjectCode())
+                    && projectRepository.existsByProjectCode(projectCode)) {
+                throw new DuplicateResourceException("Mã dự án '" + projectCode + "' đã tồn tại trong hệ thống.");
+            }
+            project.setProjectCode(projectCode);
+        }
         if (request.getDescription() != null)
             project.setDescription(request.getDescription());
         if (request.getAddress() != null)
@@ -227,7 +242,7 @@ public class ProjectServiceImpl implements ProjectService {
             .setParameter("pid", projectId).executeUpdate();
         entityManager.createNativeQuery("DELETE FROM tbl_project_slides WHERE project_id = :pid")
             .setParameter("pid", projectId).executeUpdate();
-        entityManager.createNativeQuery("DELETE FROM tbl_master_plans WHERE project_id = :pid")
+        entityManager.createNativeQuery("DELETE FROM tbl_master_plan WHERE project_id = :pid")
             .setParameter("pid", projectId).executeUpdate();
         entityManager.createNativeQuery("DELETE FROM tbl_design_sheets WHERE project_id = :pid")
             .setParameter("pid", projectId).executeUpdate();
@@ -308,7 +323,7 @@ public class ProjectServiceImpl implements ProjectService {
     public List<ProjectMemberResponseDTO> getProjectMembers(Integer projectId) {
         log.info("Fetching members of project: {}", projectId);
 
-        findProjectOrThrow(projectId);
+        findAccessibleProjectOrThrow(projectId);
         List<ProjectMember> members = projectMemberRepository.findByProjectId(projectId);
         return projectMapper.toMemberResponseDTOList(members);
     }
@@ -316,6 +331,17 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public List<ProjectResponseDTO> getProjectsByUserId(Long userId) {
         log.info("Fetching projects for user: {}", userId);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new AccessDeniedException("Bạn cần đăng nhập để xem dự án.");
+        }
+        if (!isManager(auth)) {
+            User currentUser = currentAuthenticatedUser(auth);
+            if (!Objects.equals(currentUser.getId(), userId)) {
+                throw new AccessDeniedException("Bạn chỉ được xem các dự án được phân công cho chính mình.");
+            }
+        }
 
         List<ProjectMember> memberships = projectMemberRepository.findByUserId(userId);
         List<Project> projects = memberships.stream()
@@ -330,7 +356,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public boolean checkGeofencing(Integer projectId, double userLat, double userLon) {
-        Project project = findProjectOrThrow(projectId);
+        Project project = findAccessibleProjectOrThrow(projectId);
 
         if (project.getLatitude() == null || project.getLongitude() == null) {
             throw new RuntimeException("Project GPS coordinates are not configured");
@@ -357,6 +383,34 @@ public class ProjectServiceImpl implements ProjectService {
 
     private Project findProjectOrThrow(Integer projectId) {
         return projectRepository.findById(projectId)
-                .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy dự án với mã số " + projectId + "."));
+    }
+
+    private Project findAccessibleProjectOrThrow(Integer projectId) {
+        Project project = findProjectOrThrow(projectId);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new AccessDeniedException("Bạn cần đăng nhập để truy cập dự án.");
+        }
+        if (isManager(auth)) return project;
+
+        User currentUser = currentAuthenticatedUser(auth);
+        boolean activeMember = projectMemberRepository.findByProjectIdAndUserId(projectId, currentUser.getId())
+                .map(ProjectMember::isActive)
+                .orElse(false);
+        if (!activeMember) {
+            throw new AccessDeniedException("Bạn chưa được phân công vào dự án này.");
+        }
+        return project;
+    }
+
+    private boolean isManager(Authentication auth) {
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_PM"));
+    }
+
+    private User currentAuthenticatedUser(Authentication auth) {
+        return userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new AccessDeniedException("Không xác định được tài khoản hiện tại."));
     }
 }

@@ -16,20 +16,21 @@ import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
 import { useMaterialCategories } from '../api/materialApi';
 import { cn } from '../../../lib/utils';
+import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
 
 const materialSchema = z.object({
-  nameVi: z.string().min(1, 'Tên tiếng Việt là bắt buộc'),
-  nameEn: z.string().optional(),
-  nameZh: z.string().optional(),
-  unit: z.string().min(1, 'Đơn vị tính là bắt buộc'),
-  managementCode: z.string().optional(),
-  categoryId: z.number().min(1, 'Vui lòng chọn phân loại'),
-  catalogueUrl: z.string().url('URL không hợp lệ').optional().or(z.literal('')),
-  descriptionVi: z.string().optional(),
-  descriptionEn: z.string().optional(),
-  descriptionZh: z.string().optional(),
-  revitFamilyCategory: z.string().optional(),
-  revitCode: z.string().optional(),
+  nameVi: requiredText('Tên tiếng Việt phải có ít nhất 2 ký tự', 2),
+  nameEn: optionalText(),
+  nameZh: optionalText(),
+  unit: requiredText('Đơn vị tính là bắt buộc'),
+  managementCode: optionalCode(),
+  categoryId: z.number().finite().min(1, 'Vui lòng chọn phân loại'),
+  catalogueUrl: z.string().trim().refine((value) => value === '' || /^https?:\/\//i.test(value), 'URL không hợp lệ').optional(),
+  descriptionVi: optionalText(),
+  descriptionEn: optionalText(),
+  descriptionZh: optionalText(),
+  revitFamilyCategory: optionalText(),
+  revitCode: optionalCode(),
 });
 
 type MaterialFormData = z.infer<typeof materialSchema>;
@@ -75,8 +76,18 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return;
-    const newFiles = Array.from(files)
-      .filter(f => f.type.startsWith('image/'))
+    const selectedFiles = Array.from(files);
+    const invalidType = selectedFiles.find(file => !file.type.startsWith('image/'));
+    const oversized = selectedFiles.find(file => file.size > 10 * 1024 * 1024);
+    if (invalidType) {
+      toast.error('Ảnh vật tư phải là JPG, PNG, WEBP hoặc định dạng ảnh hợp lệ.');
+      return;
+    }
+    if (oversized) {
+      toast.error('Mỗi ảnh vật tư không được vượt quá 10 MB.');
+      return;
+    }
+    const newFiles = selectedFiles
       .map(file => ({
         file,
         preview: URL.createObjectURL(file),
@@ -150,7 +161,7 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 uppercase tracking-wider">Mã quản lý (Management Code)</label>
+                <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 uppercase tracking-wider">Mã quản lý <span className="font-normal normal-case">(để trống để tự sinh)</span></label>
                 <input
                   {...register('managementCode')}
                   placeholder="VD: MAT-ELEC-001"
@@ -192,7 +203,7 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
                   />
                   {errors.nameVi && <p className="mt-1.5 text-[10px] text-red-500 font-bold">{errors.nameVi.message}</p>}
                   
-                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (VI)</label>
+                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (VI) <span className="font-normal normal-case">(tùy chọn)</span></label>
                   <textarea
                     {...register('descriptionVi')}
                     rows={2}
@@ -207,7 +218,7 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
                     placeholder="E.g: Black Steel Pipe DN50 - Hoa Phat"
                     className="w-full bg-white border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[var(--color-primary)] transition-all font-bold"
                   />
-                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (EN)</label>
+                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (EN) <span className="font-normal normal-case">(tùy chọn)</span></label>
                   <textarea
                     {...register('descriptionEn')}
                     rows={2}
@@ -222,7 +233,7 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
                     placeholder="E.g: 黑钢管 DN50 - 和发"
                     className="w-full bg-white border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[var(--color-primary)] transition-all font-bold"
                   />
-                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (ZH)</label>
+                  <label className="block text-[11px] font-bold text-[var(--color-text-secondary)] mb-1.5 mt-3 uppercase tracking-wider">Mô tả chi tiết (ZH) <span className="font-normal normal-case">(tùy chọn)</span></label>
                   <textarea
                     {...register('descriptionZh')}
                     rows={2}
@@ -256,6 +267,7 @@ export function MaterialForm({ initialData, onSubmit, onClose, isLoading }: Mate
                 <div className="relative">
                   <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--color-text-muted)]" />
                   <input
+                    type="url"
                     {...register('catalogueUrl')}
                     placeholder="https://example.com/catalogue.pdf"
                     className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:border-[var(--color-primary)] transition-all"

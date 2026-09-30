@@ -9,16 +9,20 @@ interface GeoPosition {
 interface UseGeolocationReturn {
   position: GeoPosition | null;
   error: string | null;
+  errorCode: number | null;
   isLoading: boolean;
   permissionStatus: PermissionState | null;
+  isSupported: boolean;
   refetch: () => void;
 }
 
 export function useGeolocation(): UseGeolocationReturn {
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionStatus, setPermissionStatus] = useState<PermissionState | null>(null);
+  const isSupported = typeof navigator !== 'undefined' && 'geolocation' in navigator;
 
   const handleSuccess = useCallback((pos: GeolocationPosition) => {
     setPosition({
@@ -27,14 +31,16 @@ export function useGeolocation(): UseGeolocationReturn {
       accuracy: pos.coords.accuracy,
     });
     setError(null);
+    setErrorCode(null);
     setIsLoading(false);
   }, []);
 
   const handleError = useCallback((err: GeolocationPositionError) => {
+    setErrorCode(err.code);
     let errorMsg = 'Lỗi định vị không xác định.';
     switch (err.code) {
       case 1: // PERMISSION_DENIED
-        errorMsg = 'Bạn cần cấp quyền truy cập vị trí để chấm công. Nếu đã lỡ từ chối, hãy bật lại ở thanh địa chỉ hoặc cài đặt trình duyệt.';
+        errorMsg = 'Quyền vị trí đang bị chặn. Hãy bật lại quyền cho trang này rồi bấm cập nhật vị trí.';
         break;
       case 2: // POSITION_UNAVAILABLE
         errorMsg = 'Thông tin vị trí không khả dụng. Kiểm tra GPS của bạn.';
@@ -52,6 +58,7 @@ export function useGeolocation(): UseGeolocationReturn {
   useEffect(() => {
     if (!navigator.geolocation) {
       setError('Trình duyệt không hỗ trợ Geolocation');
+      setErrorCode(null);
       setIsLoading(false);
       return;
     }
@@ -62,6 +69,9 @@ export function useGeolocation(): UseGeolocationReturn {
         setPermissionStatus(result.state);
         result.onchange = () => {
           setPermissionStatus(result.state);
+        };
+        return () => {
+          result.onchange = null;
         };
       } catch (e) {
         setPermissionStatus('prompt');
@@ -85,14 +95,22 @@ export function useGeolocation(): UseGeolocationReturn {
     } else {
       setIsLoading(false);
       if (permissionStatus === 'denied') {
-        setError('Quyền truy cập vị trí bị chặn.');
+        setError('Quyền vị trí đang bị chặn. Mở cài đặt quyền của trình duyệt để cho phép trang này.');
+        setErrorCode(1);
       } else {
-        setError('Cầu cấp quyền vị trí.');
+        setError(null);
+        setErrorCode(null);
       }
     }
   }, [permissionStatus, handleSuccess, handleError]);
 
   const refetch = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Trình duyệt không hỗ trợ định vị.');
+      setErrorCode(null);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
@@ -101,5 +119,5 @@ export function useGeolocation(): UseGeolocationReturn {
     });
   }, [handleSuccess, handleError]);
 
-  return { position, error, isLoading, permissionStatus, refetch };
+  return { position, error, errorCode, isLoading, permissionStatus, isSupported, refetch };
 }

@@ -3,6 +3,7 @@ package com.techbuildding.demoTechBuildding.service.impl;
 import com.techbuildding.demoTechBuildding.dto.response.notification.NotificationResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.Notification;
 import com.techbuildding.demoTechBuildding.entity.User;
+import com.techbuildding.demoTechBuildding.exception.ResourceNotFoundException;
 import com.techbuildding.demoTechBuildding.repository.NotificationRepository;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.service.NotificationService;
@@ -47,11 +48,11 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
-    public void markAsRead(Long notificationId) {
-        notificationRepository.findById(notificationId).ifPresent(n -> {
-            n.setIsRead(true);
-            notificationRepository.save(n);
-        });
+    public void markAsRead(Long userId, Long notificationId) {
+        Notification notification = notificationRepository.findByIdAndUserId(notificationId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Thông báo không tồn tại."));
+        notification.setIsRead(true);
+        notificationRepository.save(notification);
     }
 
     @Override

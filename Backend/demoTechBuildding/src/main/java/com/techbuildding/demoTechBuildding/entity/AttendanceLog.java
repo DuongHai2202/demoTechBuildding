@@ -23,6 +23,11 @@ public class AttendanceLog extends AbstractEntity<Long> {
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
 
+    /** Nullable for legacy/manager override records created before shift planning. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shift_assignment_id")
+    private ShiftAssignment shiftAssignment;
+
     @Column(name = "check_in_at")
     private LocalDateTime checkInAt;
 
@@ -44,6 +49,15 @@ public class AttendanceLog extends AbstractEntity<Long> {
     @Column(name = "distance_in_meters")
     private Float distanceInMeters;
 
+    @Column(name = "distance_out_meters")
+    private Float distanceOutMeters;
+
+    @Column(name = "gps_accuracy_in")
+    private Double gpsAccuracyIn;
+
+    @Column(name = "gps_accuracy_out")
+    private Double gpsAccuracyOut;
+
     @Column(name = "selfie_url_in")
     private String selfieUrlIn;
 
@@ -52,6 +66,42 @@ public class AttendanceLog extends AbstractEntity<Long> {
 
     @Column(name = "status", length = 50)
     private String status;
+
+    @Column(name = "scheduled_start_at")
+    private LocalDateTime scheduledStartAt;
+
+    @Column(name = "scheduled_end_at")
+    private LocalDateTime scheduledEndAt;
+
+    @Column(name = "break_minutes")
+    private Integer breakMinutes;
+
+    @Column(name = "late_minutes")
+    private Long lateMinutes;
+
+    @Column(name = "early_leave_minutes")
+    private Long earlyLeaveMinutes;
+
+    @Column(name = "overtime_minutes")
+    private Long overtimeMinutes;
+
+    /** NONE when there is no overtime, otherwise PENDING/APPROVED/REJECTED. */
+    @Builder.Default
+    @Column(name = "overtime_status", nullable = false, length = 20)
+    private String overtimeStatus = "NONE";
+
+    @Builder.Default
+    @Column(name = "overtime_approved_minutes")
+    private Long overtimeApprovedMinutes = 0L;
+
+    @Column(name = "overtime_reviewed_by", length = 50)
+    private String overtimeReviewedBy;
+
+    @Column(name = "overtime_reviewed_at")
+    private LocalDateTime overtimeReviewedAt;
+
+    @Column(name = "overtime_review_note", length = 500)
+    private String overtimeReviewNote;
 
     @Column(name = "remarks")
     private String remarks;

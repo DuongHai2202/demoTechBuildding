@@ -8,15 +8,25 @@ import com.techbuildding.demoTechBuildding.entity.BidSubmission;
 import com.techbuildding.demoTechBuildding.entity.BiddingPackage;
 import com.techbuildding.demoTechBuildding.entity.Partner;
 import com.techbuildding.demoTechBuildding.entity.Project;
+import com.techbuildding.demoTechBuildding.entity.User;
 import com.techbuildding.demoTechBuildding.repository.BidSubmissionRepository;
 import com.techbuildding.demoTechBuildding.repository.BiddingPackageRepository;
 import com.techbuildding.demoTechBuildding.repository.PartnerRepository;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
+import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.service.BiddingService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.exception.BadRequestException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,6 +38,8 @@ public class BiddingServiceImpl implements BiddingService {
     private final BidSubmissionRepository submissionRepository;
     private final ProjectRepository projectRepository;
     private final PartnerRepository partnerRepository;
+    private final UserRepository userRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     @Transactional
@@ -35,9 +47,16 @@ public class BiddingServiceImpl implements BiddingService {
         Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new RuntimeException("Project not found: " + request.getProjectId()));
 
+        String packageCode = codeGenerator.cleanProvidedCode(request.getPackageCode());
+        if (packageCode == null) {
+            packageCode = codeGenerator.next(StandardCodeType.BIDDING_PACKAGE, packageRepository::existsByPackageCode);
+        } else if (packageRepository.existsByPackageCode(packageCode)) {
+            throw new DuplicateResourceException("Mã gói thầu '" + packageCode + "' đã tồn tại.");
+        }
+
         BiddingPackage biddingPackage = BiddingPackage.builder()
                 .project(project)
-                .packageCode(request.getPackageCode())
+                .packageCode(packageCode)
                 .packageName(request.getPackageName())
                 .description(request.getDescription())
                 .budget(request.getBudget())
@@ -54,6 +73,7 @@ public class BiddingServiceImpl implements BiddingService {
     @Transactional(readOnly = true)
     public List<BiddingPackageResponseDTO> getPackagesByProject(Integer projectId) {
         return packageRepository.findByProjectId(projectId).stream()
+                .filter(this::isVisibleToCurrentUser)
                 .map(this::mapToPackageResponse)
                 .collect(Collectors.toList());
     }
@@ -62,6 +82,7 @@ public class BiddingServiceImpl implements BiddingService {
     @Transactional(readOnly = true)
     public List<BiddingPackageResponseDTO> getAllPackages() {
         return packageRepository.findAll().stream()
+                .filter(this::isVisibleToCurrentUser)
                 .map(this::mapToPackageResponse)
                 .collect(Collectors.toList());
     }
@@ -71,6 +92,7 @@ public class BiddingServiceImpl implements BiddingService {
     public BiddingPackageResponseDTO getPackageById(Integer id) {
         BiddingPackage biddingPackage = packageRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Bidding package not found: " + id));
+        ensureVisibleToCurrentUser(biddingPackage);
         return mapToPackageResponse(biddingPackage);
     }
 
@@ -89,9 +111,32 @@ public class BiddingServiceImpl implements BiddingService {
     public BidSubmissionResponseDTO submitBid(BidSubmissionRequestDTO request) {
         BiddingPackage biddingPackage = packageRepository.findById(request.getPackageId())
                 .orElseThrow(() -> new RuntimeException("Bidding package not found: " + request.getPackageId()));
+
+        if (isPartnerPrincipal()) {
+            ensureVisibleToCurrentUser(biddingPackage);
+            Integer linkedPartnerId = getCurrentPartnerId();
+            if (request.getPartnerId() == null || !linkedPartnerId.equals(request.getPartnerId())) {
+                throw new AccessDeniedException("Tài khoản chỉ được nộp hồ sơ bằng đúng đối tác đã liên kết.");
+            }
+            if (!isOpenForPartner(biddingPackage)) {
+                throw new BadRequestException("Gói thầu chưa mở hoặc đã quá hạn nhận hồ sơ.");
+            }
+        }
         
         Partner partner = partnerRepository.findById(request.getPartnerId())
                 .orElseThrow(() -> new RuntimeException("Partner not found: " + request.getPartnerId()));
+
+        if (request.getBidPrice() == null || request.getBidPrice().signum() < 0) {
+            throw new BadRequestException("Giá dự thầu phải là số không âm.");
+        }
+        if ("CLOSED".equalsIgnoreCase(biddingPackage.getStatus())
+                || "AWARDED".equalsIgnoreCase(biddingPackage.getStatus())
+                || "CANCELLED".equalsIgnoreCase(biddingPackage.getStatus())) {
+            throw new BadRequestException("Gói thầu đã đóng hoặc hủy, không thể thêm hồ sơ.");
+        }
+        if (submissionRepository.existsByBiddingPackageIdAndPartnerId(request.getPackageId(), request.getPartnerId())) {
+            throw new DuplicateResourceException("Nhà thầu này đã có hồ sơ trong gói thầu.");
+        }
 
         BidSubmission submission = BidSubmission.builder()
                 .biddingPackage(biddingPackage)
@@ -109,7 +154,19 @@ public class BiddingServiceImpl implements BiddingService {
     @Override
     @Transactional(readOnly = true)
     public List<BidSubmissionResponseDTO> getSubmissionsByPackage(Integer packageId) {
-        return submissionRepository.findByBiddingPackageId(packageId).stream()
+        BiddingPackage biddingPackage = packageRepository.findById(packageId)
+                .orElseThrow(() -> new RuntimeException("Bidding package not found: " + packageId));
+        ensureVisibleToCurrentUser(biddingPackage);
+
+        List<BidSubmission> submissions = submissionRepository.findByBiddingPackageId(packageId);
+        if (isPartnerPrincipal()) {
+            Integer linkedPartnerId = getCurrentPartnerId();
+            submissions = submissions.stream()
+                    .filter(submission -> linkedPartnerId.equals(submission.getPartner().getId()))
+                    .collect(Collectors.toList());
+        }
+
+        return submissions.stream()
                 .map(this::mapToSubmissionResponse)
                 .collect(Collectors.toList());
     }
@@ -120,7 +177,12 @@ public class BiddingServiceImpl implements BiddingService {
         BidSubmission submission = submissionRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Bid submission not found: " + id));
         
-        submission.setStatus(status);
+        if (status == null || !("PENDING".equalsIgnoreCase(status)
+                || "ACCEPTED".equalsIgnoreCase(status)
+                || "REJECTED".equalsIgnoreCase(status))) {
+            throw new BadRequestException("Trạng thái hồ sơ không hợp lệ.");
+        }
+        submission.setStatus(status.toUpperCase());
         if (notes != null) {
             submission.setNotes(notes);
         }
@@ -173,5 +235,55 @@ public class BiddingServiceImpl implements BiddingService {
                 .notes(bs.getNotes())
                 .submissionDate(bs.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * Partners only receive packages that have been published for external
+     * participation and whose deadline has not passed. ADMIN/PM keep the
+     * complete internal view.
+     */
+    private boolean isVisibleToCurrentUser(BiddingPackage biddingPackage) {
+        return !isPartnerPrincipal() || isOpenForPartner(biddingPackage);
+    }
+
+    private void ensureVisibleToCurrentUser(BiddingPackage biddingPackage) {
+        if (isPartnerPrincipal() && !isOpenForPartner(biddingPackage)) {
+            throw new AccessDeniedException("Gói thầu này chưa được công khai cho tài khoản đối tác.");
+        }
+    }
+
+    private boolean isOpenForPartner(BiddingPackage biddingPackage) {
+        if (biddingPackage == null || biddingPackage.getStatus() == null) {
+            return false;
+        }
+
+        boolean publicStatus = "PUBLISHED".equalsIgnoreCase(biddingPackage.getStatus())
+                || "OPEN".equalsIgnoreCase(biddingPackage.getStatus())
+                || "BIDDING".equalsIgnoreCase(biddingPackage.getStatus())
+                || "INVITING".equalsIgnoreCase(biddingPackage.getStatus());
+        LocalDateTime deadline = biddingPackage.getDeadline();
+        return publicStatus && (deadline == null || !deadline.isBefore(LocalDateTime.now()));
+    }
+
+    private boolean isPartnerPrincipal() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.isAuthenticated()
+                && authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_PARTNER".equals(authority.getAuthority()));
+    }
+
+    private Integer getCurrentPartnerId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Cần đăng nhập để thực hiện thao tác này.");
+        }
+
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new AccessDeniedException("Không xác định được tài khoản hiện tại."));
+        if (user.getPartner() == null || user.getPartner().getId() == null) {
+            throw new AccessDeniedException("Tài khoản đối tác chưa được liên kết với hồ sơ nhà thầu.");
+        }
+        return user.getPartner().getId();
     }
 }

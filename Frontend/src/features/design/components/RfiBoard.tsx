@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRfis } from '../api/rfiApi';
 import { 
   PlusIcon, 
@@ -12,6 +12,10 @@ import { StatusBadge } from '../../../components/StatusBadge';
 import type { Rfi, RfiStatus } from '../types/design.types';
 import { RfiDetailModal, RfiForm } from './index';
 import { useDeleteRfi } from '../api/rfiApi';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 9;
 
 const STATUS_MAP: Record<RfiStatus, { label: string; variant: 'success' | 'info' | 'warning' | 'danger', icon: any }> = {
   OPEN: { label: 'Mở', variant: 'warning', icon: ChatBubbleLeftRightIcon },
@@ -24,9 +28,18 @@ export function RfiBoard({ projectId, zoneId }: { projectId: number, zoneId?: nu
   const { data: rfis, isLoading } = useRfis(projectId, zoneId);
   const [selectedRfiId, setSelectedRfiId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [page, setPage] = useState(1);
 
   // Filter is handled by API hook now
   const filtered = rfis || [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [filtered.length]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRfis = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface)]">
@@ -53,8 +66,9 @@ export function RfiBoard({ projectId, zoneId }: { projectId: number, zoneId?: nu
              <p className="text-sm font-medium text-[var(--color-text-muted)]">Chưa có yêu cầu làm rõ nào.</p>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(rfi => (
+            {paginatedRfis.map(rfi => (
               <RfiCard 
                 key={rfi.id} 
                 rfi={rfi} 
@@ -62,6 +76,15 @@ export function RfiBoard({ projectId, zoneId }: { projectId: number, zoneId?: nu
               />
             ))}
           </div>
+          <Pagination
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+            itemLabel="RFI"
+            ariaLabel="Phân trang yêu cầu làm rõ"
+          />
+          </>
         )}
       </div>
 
@@ -83,12 +106,18 @@ export function RfiBoard({ projectId, zoneId }: { projectId: number, zoneId?: nu
 }
 
 function RfiCard({ rfi, onClick }: { rfi: Rfi, onClick: () => void }) {
+  const { confirm } = useActionDialog();
   const status = STATUS_MAP[rfi.status] || STATUS_MAP.OPEN;
   const deleteRfi = useDeleteRfi();
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Bạn có chắc chắn muốn xóa RFI này?')) {
+    if (await confirm({
+      title: 'Xóa RFI',
+      description: 'RFI này sẽ bị xóa khỏi danh sách theo dõi. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa RFI',
+      variant: 'danger',
+    })) {
       deleteRfi.mutate(rfi.id);
     }
   };

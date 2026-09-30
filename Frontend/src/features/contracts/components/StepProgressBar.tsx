@@ -1,13 +1,14 @@
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
+import type { ContractWorkflowStepDefinition } from '../types/contract.types';
 
-const WORKFLOW_STEPS = [
-  { step: 1, label: 'Lập kế hoạch' },
-  { step: 2, label: 'Gửi báo giá' },
-  { step: 3, label: 'Thương thảo hợp đồng' },
-  { step: 4, label: 'Ký hợp đồng' },
-  { step: 5, label: 'Tạm ứng thực hiện hợp đồng' },
-  { step: 6, label: 'Thanh toán giai đoạn' },
-  { step: 7, label: 'Quyết toán' },
+export const CONTRACT_WORKFLOW_STEPS: ContractWorkflowStepDefinition[] = [
+  { step: 1, label: 'Lập kế hoạch', description: 'Chuẩn bị phạm vi, ngân sách và hồ sơ đầu vào.', owner: 'Chủ đầu tư / PM', requirement: 'Có dự án và phạm vi công việc.' },
+  { step: 2, label: 'Mời báo giá', description: 'Phát hành hồ sơ và tiếp nhận báo giá từ nhà thầu.', owner: 'Bộ phận đấu thầu', requirement: 'Có ngân sách, tiêu chí và hạn nộp hồ sơ.' },
+  { step: 3, label: 'Đánh giá & thương thảo', description: 'So sánh giá, năng lực, kỹ thuật và điều kiện thương mại.', owner: 'Tổ đánh giá', requirement: 'Có hồ sơ dự thầu để so sánh.' },
+  { step: 4, label: 'Ký hợp đồng', description: 'Chốt điều khoản, phê duyệt và ký kết hợp đồng.', owner: 'Pháp chế / Người có thẩm quyền', requirement: 'Điều khoản cuối cùng đã được duyệt.' },
+  { step: 5, label: 'Tạm ứng / Khởi công', description: 'Kiểm tra bảo lãnh và kích hoạt thực hiện hợp đồng.', owner: 'PM / Tài chính', requirement: 'Có ngày ký và hồ sơ bảo lãnh phù hợp.' },
+  { step: 6, label: 'Thanh toán giai đoạn', description: 'Theo dõi nghiệm thu, khối lượng và từng đợt thanh toán.', owner: 'PM / Tài chính', requirement: 'Có ngày bắt đầu và hồ sơ nghiệm thu.' },
+  { step: 7, label: 'Quyết toán & đóng', description: 'Đối chiếu giá trị cuối cùng, bảo hành và đóng hợp đồng.', owner: 'PM / Tài chính / Pháp chế', requirement: 'Có ngày kết thúc và biên bản quyết toán.' },
 ];
 
 interface StepProgressBarProps {
@@ -17,10 +18,10 @@ interface StepProgressBarProps {
 export function StepProgressBar({ currentStep }: StepProgressBarProps) {
   return (
     <div className="flex items-center justify-between w-full py-4 px-2">
-      {WORKFLOW_STEPS.map((ws, idx) => {
+      {CONTRACT_WORKFLOW_STEPS.map((ws, idx) => {
         const isCompleted = ws.step < currentStep;
         const isCurrent = ws.step === currentStep;
-        const isLast = idx === WORKFLOW_STEPS.length - 1;
+        const isLast = idx === CONTRACT_WORKFLOW_STEPS.length - 1;
 
         return (
           <div key={ws.step} className="flex items-center flex-1 last:flex-none">

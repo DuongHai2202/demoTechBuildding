@@ -23,32 +23,40 @@ public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.from}")
+    @Value("${spring.mail.from:${spring.mail.username:}}")
     private String emailFrom;
 
     @Async
     @Override
     public void sendOtpEmail(String to, String username, String otpCode) {
-        log.info("Sending OTP email to: {}", to);
+        log.info("Đang chuẩn bị gửi email OTP đến: {}", to);
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(emailFrom, "Tech Building");
 
+            String sender = (emailFrom != null && !emailFrom.isBlank()) ? emailFrom : "noreply@techbuilding.com";
+            helper.setFrom(sender, "TechBuilding");
             helper.setTo(to);
-            helper.setSubject("TechBuilding - Verify Your Account");
+            helper.setSubject("TechBuilding - Mã xác thực tài khoản (OTP)");
             helper.setText(buildOtpEmailHtml(username, otpCode), true);
 
             mailSender.send(message);
-            log.info("OTP email sent successfully to: {}", to);
+            log.info("Gửi email OTP thành công đến: {}", to);
 
         } catch (Exception e) {
-            log.error("CRITICAL: Failed to send OTP email to: {}. Error type: {}, Message: {}", 
+            log.error("CRITICAL: Không thể gửi email OTP đến '{}' qua Gmail SMTP. Lỗi [{}]: {}",
                 to, e.getClass().getSimpleName(), e.getMessage());
-            // We throw a runtime exception but since it's @Async, it won't block the user.
-            // The logs will be the primary diagnostic tool.
-            throw new RuntimeException("Failed to send verification email", e);
+            log.warn("""
+
+                ================================================================================
+                [DEV FALLBACK - XÁC THỰC TÀI KHOẢN]
+                -> Người nhận: {} (Tài khoản: {})
+                -> MÃ OTP XÁC THỰC LÀ: [{}]
+                -> Nhập mã này trên giao diện xác thực để kích hoạt tài khoản.
+                (Lưu ý: Để gửi email thật, vui lòng cấu hình Mật khẩu ứng dụng Gmail hợp lệ)
+                ================================================================================
+                """, to, username, otpCode);
         }
     }
 
@@ -57,18 +65,29 @@ public class EmailServiceImpl implements EmailService {
      */
     private String buildOtpEmailHtml(String username, String otpCode) {
         return """
-                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-                    <div style="background: #1a73e8; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-                        <h1 style="margin: 0;">TechBuilding</h1>
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; padding: 25px; background-color: #f4f6f8;">
+                    <div style="background: linear-gradient(135deg, #1e3c72 0%%, #2a5298 100%%); color: white; padding: 28px 20px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h2 style="margin: 0; font-size: 24px; letter-spacing: 1px;">TechBuilding System</h2>
+                        <p style="margin: 6px 0 0 0; opacity: 0.9; font-size: 14px;">Hệ Thống Quản Lý Tòa Nhà & Nhân Sự</p>
                     </div>
-                    <div style="background: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px;">
-                        <p>Hello <strong>%s</strong>,</p>
-                        <p>Your verification code is:</p>
-                        <div style="background: #fff; border: 2px dashed #1a73e8; padding: 15px; text-align: center; margin: 20px 0; border-radius: 8px;">
-                            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a73e8;">%s</span>
+                    <div style="background: #ffffff; padding: 32px 28px; border: 1px solid #e1e4e8; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.03);">
+                        <p style="font-size: 16px; color: #333; margin-top: 0;">Xin chào <strong>%s</strong>,</p>
+                        <p style="font-size: 14px; color: #555; line-height: 1.6;">
+                            Cảm ơn bạn đã đăng ký tài khoản tại hệ thống <strong>TechBuilding</strong>. Dưới đây là mã xác thực một lần (OTP) để hoàn tất đăng ký:
+                        </p>
+                        <div style="background: #f0f4ff; border: 2px dashed #2a5298; padding: 18px; text-align: center; margin: 24px 0; border-radius: 8px;">
+                            <span style="font-size: 34px; font-weight: 800; letter-spacing: 10px; color: #1e3c72; font-family: monospace;">%s</span>
                         </div>
-                        <p>This code will expire in <strong>5 minutes</strong>.</p>
-                        <p style="color: #666; font-size: 12px;">If you did not request this code, please ignore this email.</p>
+                        <p style="font-size: 13px; color: #e65100; font-weight: 500;">
+                            * Mã xác thực có hiệu lực trong vòng <strong>5 phút</strong>.
+                        </p>
+                        <p style="font-size: 13px; color: #777; line-height: 1.5;">
+                            Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email hoặc liên hệ với ban quản trị.
+                        </p>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0 15px 0;">
+                        <p style="text-align: center; color: #999; font-size: 12px; margin: 0;">
+                            © 2026 TechBuilding Platform. All rights reserved.
+                        </p>
                     </div>
                 </div>
                 """

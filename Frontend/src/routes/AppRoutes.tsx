@@ -7,6 +7,7 @@ import { AuthLayout } from '../layouts/AuthLayout';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { ProtectedRoute } from './ProtectedRoute';
+import { PermissionRoute } from './ProtectedRoute';
 
 // Lazy load pages (React_Skill: performance – Bundle Optimization)
 const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
@@ -25,6 +26,7 @@ const ContractDetailPage = lazy(() => import('../pages/contracts/ContractDetailP
 const PartnersPage = lazy(() => import('../pages/PartnersPage'));
 const UsersPage = lazy(() => import('../pages/UsersPage'));
 const SettingsPage = lazy(() => import('../pages/SettingsPage'));
+const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 import PendingApprovalPage from '../pages/auth/PendingApprovalPage';
 const ApprovalRequestsPage = lazy(() => import('../pages/admin/ApprovalRequestsPage'));
 const MaterialManagementPage = lazy(() => import('../pages/MaterialManagementPage'));
@@ -32,6 +34,7 @@ const AttendanceManagementPage = lazy(() => import('../pages/admin/AttendanceMan
 const TechnicalStandardsPage = lazy(() => import('../pages/TechnicalStandardsPage'));
 const BiddingPage = lazy(() => import('../pages/BiddingPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
+const ForbiddenPage = lazy(() => import('../pages/ForbiddenPage'));
 
 export function AppRoutes() {
   return (
@@ -46,24 +49,55 @@ export function AppRoutes() {
       {/* Protected pages */}
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout sidebar={<Sidebar />} header={<Header />} />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="projects" element={<ProjectListPage />} />
-          <Route path="projects/new" element={<ProjectCreatePage />} />
-          <Route path="projects/:id" element={<ProjectDetailPage />} />
-          <Route path="projects/:id/edit" element={<ProjectEditPage />} />
-          <Route path="projects/:id/contracts/:contractId" element={<ContractDetailPage />} />
-          <Route path="attendance" element={<AttendancePage />} />
-          <Route path="materials" element={<MaterialsPage />} />
-          <Route path="worklogs" element={<WorkLogsPage />} />
-          <Route path="contracts" element={<ContractsPage />} />
-          <Route path="partners" element={<PartnersPage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="approval-requests" element={<ApprovalRequestsPage />} />
-          <Route path="admin/attendance" element={<AttendanceManagementPage />} />
-          <Route path="material-management" element={<MaterialManagementPage />} />
-          <Route path="technical-standards" element={<TechnicalStandardsPage />} />
-          <Route path="bidding" element={<BiddingPage />} />
+          <Route element={<PermissionRoute permission="DASHBOARD_VIEW" />}>
+            <Route index element={<DashboardPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="PROJECT_READ" />}>
+            <Route path="projects" element={<ProjectListPage />} />
+            <Route path="projects/:id" element={<ProjectDetailPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="PROJECT_MANAGE" />}>
+            <Route path="projects/new" element={<ProjectCreatePage />} />
+            <Route path="projects/:id/edit" element={<ProjectEditPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="CONTRACT_READ" />}>
+            <Route path="projects/:id/contracts/:contractId" element={<ContractDetailPage />} />
+            <Route path="contracts" element={<ContractsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="ATTENDANCE_USE" />}>
+            <Route path="attendance" element={<AttendancePage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="MATERIAL_READ" />}>
+            <Route path="materials" element={<MaterialsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="WORKLOG_READ" />}>
+            <Route path="worklogs" element={<WorkLogsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="PARTNER_READ" />}>
+            <Route path="partners" element={<PartnersPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="USER_MANAGE" />}>
+            <Route path="users" element={<UsersPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="SETTINGS_VIEW" />}>
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route element={<PermissionRoute permission="ROLE_REQUEST_REVIEW" />}>
+            <Route path="approval-requests" element={<ApprovalRequestsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="ATTENDANCE_MANAGE" />}>
+            <Route path="admin/attendance" element={<AttendanceManagementPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="MATERIAL_REQUEST" />}>
+            <Route path="material-management" element={<MaterialManagementPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="TECHNICAL_STANDARD_READ" />}>
+            <Route path="technical-standards" element={<TechnicalStandardsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="BIDDING_READ" />}>
+            <Route path="bidding" element={<BiddingPage />} />
+          </Route>
         </Route>
         
         {/* Full-screen pages for Pending User */}
@@ -71,6 +105,7 @@ export function AppRoutes() {
       </Route>
 
       {/* 404 */}
+      <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

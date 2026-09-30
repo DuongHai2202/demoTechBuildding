@@ -7,6 +7,9 @@ import com.techbuildding.demoTechBuildding.entity.Zone;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.repository.ZoneRepository;
 import com.techbuildding.demoTechBuildding.service.ZoneService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +22,7 @@ public class ZoneServiceImpl implements ZoneService {
 
     private final ZoneRepository zoneRepository;
     private final ProjectRepository projectRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     public ZoneResponseDTO createZone(ZoneRequestDTO request) {
@@ -31,10 +35,17 @@ public class ZoneServiceImpl implements ZoneService {
                     .orElseThrow(() -> new RuntimeException("Parent zone not found: " + request.getParentId()));
         }
 
+        String zoneCode = codeGenerator.cleanProvidedCode(request.getZoneCode());
+        if (zoneCode == null) {
+            zoneCode = codeGenerator.next(StandardCodeType.ZONE, zoneRepository::existsByZoneCode);
+        } else if (zoneRepository.existsByZoneCode(zoneCode)) {
+            throw new DuplicateResourceException("Mã khu vực '" + zoneCode + "' đã tồn tại.");
+        }
+
         Zone zone = Zone.builder()
                 .project(project)
                 .name(request.getName())
-                .zoneCode(request.getZoneCode())
+                .zoneCode(zoneCode)
                 .parent(parent)
                 .build();
         

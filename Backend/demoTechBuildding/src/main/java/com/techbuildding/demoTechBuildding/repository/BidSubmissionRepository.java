@@ -10,4 +10,5 @@ import java.util.List;
 public interface BidSubmissionRepository extends JpaRepository<BidSubmission, Integer> {
     List<BidSubmission> findByBiddingPackageId(Integer packageId);
     List<BidSubmission> findByPartnerId(Integer partnerId);
+    boolean existsByBiddingPackageIdAndPartnerId(Integer packageId, Integer partnerId);
 }

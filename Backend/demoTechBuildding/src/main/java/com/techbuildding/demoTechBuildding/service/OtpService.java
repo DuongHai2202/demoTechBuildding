@@ -13,6 +13,9 @@ public interface OtpService {
      */
     String generateAndSaveOtp(User user, String type);
 
+    /** Remove a pending OTP when an account is deleted or its flow is reset. */
+    void clearOtp(Long userId, String type);
+
     /**
      * Verify OTP code for a user. Checks:
      * - OTP exists

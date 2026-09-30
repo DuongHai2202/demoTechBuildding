@@ -19,6 +19,22 @@ Backend/demoTechBuildding/.settings
 Backend/demoTechBuildding/build/
 Backend/demoTechBuildding/mysql_data/
 
+# Runtime data, local logs and generated storage must never be committed
+**/minio_data/
+**/redis_data/
+**/repository/
+**/*.log
+**/backend-*.log
+**/frontend-*.log
+
+# Local reports and generated documentation are kept outside the source push
+docs/
+**/TechBuilding_Docs/
+Backend/demoTechBuildding/HSNL_TechBuilder.pdf
+
+# Temporary files created by local inspection/tools
+=
+
 # Global/Editor
 .idea/
 .vscode/

@@ -54,27 +54,32 @@ public class ExcelExportService {
             sheet.setColumnWidth(3, 5500); // Giờ vào
             sheet.setColumnWidth(4, 5500); // Giờ ra
             sheet.setColumnWidth(5, 4000); // Số giờ
-            sheet.setColumnWidth(6, 5000); // Trạng thái
+            sheet.setColumnWidth(6, 4000); // Số phút
+            sheet.setColumnWidth(7, 4500); // Tăng ca tính
+            sheet.setColumnWidth(8, 4500); // Tăng ca duyệt
+            sheet.setColumnWidth(9, 5000); // Trạng thái tăng ca
+            sheet.setColumnWidth(10, 5500); // Thời lượng
+            sheet.setColumnWidth(11, 5000); // Trạng thái
 
             // ---- Row 0: Report Title ----
             Row titleRow = sheet.createRow(0);
             Cell titleCell = titleRow.createCell(0);
             titleCell.setCellValue("BÁO CÁO CHẤM CÔNG - " + projectName.toUpperCase());
             titleCell.setCellStyle(createTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 6));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 11));
 
             // ---- Row 1: Date Range ----
             Row subTitleRow = sheet.createRow(1);
             Cell subTitleCell = subTitleRow.createCell(0);
             subTitleCell.setCellValue("Khoảng thời gian: " + startDate.format(DATE_FMT) + " → " + endDate.format(DATE_FMT));
             subTitleCell.setCellStyle(createSubTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, 6));
+            sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, 11));
 
             // ---- Row 2: Empty ----
             sheet.createRow(2);
 
             // ---- Row 3: Headers ----
-            String[] headers = { "STT", "Nhân viên", "Ngày", "Giờ vào", "Giờ ra", "Số giờ", "Trạng thái" };
+            String[] headers = { "STT", "Nhân viên", "Ngày", "Giờ vào", "Giờ ra", "Số giờ", "Số phút", "Tăng ca tính", "Tăng ca duyệt", "Trạng thái tăng ca", "Thời lượng", "Trạng thái" };
             Row headerRow = sheet.createRow(3);
             CellStyle headerStyle = createHeaderStyle(workbook);
             for (int i = 0; i < headers.length; i++) {
@@ -88,7 +93,7 @@ public class ExcelExportService {
             CellStyle altDataStyle = createAltDataStyle(workbook);
 
             int rowNum = 4;
-            double totalHours = 0;
+            long totalMinutes = 0;
             for (int i = 0; i < logs.size(); i++) {
                 AttendanceResponseDTO log = logs.get(i);
                 Row row = sheet.createRow(rowNum++);
@@ -103,10 +108,15 @@ public class ExcelExportService {
                         style);
                 createCell(row, 5, log.getWorkingHours() != null ? String.format("%.1f h", log.getWorkingHours()) : "-",
                         style);
-                createCell(row, 6, log.getStatus() != null ? log.getStatus() : "-", style);
+                createCell(row, 6, log.getWorkingMinutes() != null ? log.getWorkingMinutes() + " phút" : "-", style);
+                createCell(row, 7, formatMinutes(log.getOvertimeMinutes()), style);
+                createCell(row, 8, formatMinutes(log.getOvertimeApprovedMinutes()), style);
+                createCell(row, 9, overtimeStatusLabel(log.getOvertimeStatus()), style);
+                createCell(row, 10, log.getDurationText() != null ? log.getDurationText() : "-", style);
+                createCell(row, 11, log.getStatus() != null ? log.getStatus() : "-", style);
 
-                if (log.getWorkingHours() != null)
-                    totalHours += log.getWorkingHours();
+                if (log.getWorkingMinutes() != null)
+                    totalMinutes += log.getWorkingMinutes();
             }
 
             // ---- Summary Row ----
@@ -115,13 +125,24 @@ public class ExcelExportService {
             createCell(totalRow, 0, "TỔNG CỘNG", totalStyle);
             createCell(totalRow, 1, logs.size() + " bản ghi", totalStyle);
             sheet.addMergedRegion(new CellRangeAddress(rowNum + 1, rowNum + 1, 1, 4));
+            double totalHours = totalMinutes / 60.0;
             createCell(totalRow, 5, String.format("%.1f h", totalHours), totalStyle);
-            createCell(totalRow, 6, "", totalStyle);
+            createCell(totalRow, 6, totalMinutes + " phút", totalStyle);
+            long totalApprovedOvertime = logs.stream()
+                    .map(AttendanceResponseDTO::getOvertimeApprovedMinutes)
+                    .filter(value -> value != null)
+                    .mapToLong(Long::longValue)
+                    .sum();
+            createCell(totalRow, 7, "", totalStyle);
+            createCell(totalRow, 8, formatMinutes(totalApprovedOvertime), totalStyle);
+            createCell(totalRow, 9, "Chỉ tính phút đã duyệt", totalStyle);
+            createCell(totalRow, 10, formatDuration(totalMinutes), totalStyle);
+            createCell(totalRow, 11, "", totalStyle);
 
             // Write to bytes
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             workbook.write(output);
-            log.info("Excel export completed: {} rows, {:.1f} total hours", logs.size(), totalHours);
+            log.info("Excel export completed: {} rows, {} total minutes", logs.size(), totalMinutes);
             return output.toByteArray();
 
         } catch (IOException e) {
@@ -214,5 +235,27 @@ public class ExcelExportService {
         Cell cell = row.createCell(col);
         cell.setCellValue(value);
         cell.setCellStyle(style);
+    }
+
+    private String formatDuration(long minutes) {
+        long hours = minutes / 60;
+        long remainingMinutes = minutes % 60;
+        if (hours == 0) return remainingMinutes + " phút";
+        if (remainingMinutes == 0) return hours + " giờ";
+        return hours + " giờ " + remainingMinutes + " phút";
+    }
+
+    private String formatMinutes(Long minutes) {
+        return minutes == null ? "-" : minutes + " phút";
+    }
+
+    private String overtimeStatusLabel(String status) {
+        if (status == null || status.isBlank() || "NONE".equalsIgnoreCase(status)) return "Không có";
+        return switch (status.toUpperCase()) {
+            case "PENDING" -> "Chờ duyệt";
+            case "APPROVED" -> "Đã duyệt";
+            case "REJECTED" -> "Từ chối";
+            default -> status;
+        };
     }
 }

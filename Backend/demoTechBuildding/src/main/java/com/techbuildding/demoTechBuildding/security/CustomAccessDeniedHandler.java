@@ -39,7 +39,7 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 
         ResponseError error = new ResponseError(
                 HttpStatus.FORBIDDEN.value(),
-                "Access denied: You do not have permission to access this resource");
+                "Bạn không có quyền thực hiện thao tác này.");
 
         objectMapper.writeValue(response.getOutputStream(), error);
     }

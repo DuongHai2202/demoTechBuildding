@@ -5,6 +5,7 @@ import com.techbuildding.demoTechBuildding.service.EmailService;
 import com.techbuildding.demoTechBuildding.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -35,8 +36,10 @@ public class OtpServiceImpl implements OtpService {
     private final RedisTemplate<String, String> redisTemplate;
     private final EmailService emailService;
 
-    private static final int OTP_EXPIRY_MINUTES = 5;
     private static final String OTP_KEY_PREFIX = "otp:";
+
+    @Value("${app.auth.otp-expiry-minutes:5}")
+    private int otpExpiryMinutes;
 
     /**
      * Build Redis key: "otp:{userId}:{type}"
@@ -53,9 +56,9 @@ public class OtpServiceImpl implements OtpService {
 
         // Save to Redis with TTL = 5 minutes
         // When TTL expires, Redis automatically deletes the key → no cleanup needed
-        redisTemplate.opsForValue().set(key, code, OTP_EXPIRY_MINUTES, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(key, code, otpExpiryMinutes, TimeUnit.MINUTES);
 
-        log.info("OTP saved to Redis: key={}, expires in {} minutes", key, OTP_EXPIRY_MINUTES);
+        log.info("OTP saved to Redis: key={}, expires in {} minutes", key, otpExpiryMinutes);
 
         // Send OTP via email
         if (user.getEmail() != null) {
@@ -65,6 +68,11 @@ public class OtpServiceImpl implements OtpService {
         }
 
         return code;
+    }
+
+    @Override
+    public void clearOtp(Long userId, String type) {
+        redisTemplate.delete(buildKey(userId, type));
     }
 
     @Override

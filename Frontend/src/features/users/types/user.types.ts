@@ -9,8 +9,10 @@ export interface User {
   email: string;
   avatarUrl: string | null;
   status: UserStatus;
+  deleted?: boolean;
   createdAt: string;
   roles: UserRole[];
+  partnerId?: number | null;
   hasFaceRegistered?: boolean;
   faceDescriptor?: string;
 }
@@ -34,4 +36,5 @@ export interface UserRequest {
   email?: string;
   roles?: UserRole[];
   status?: UserStatus;
+  partnerId?: number | null;
 }

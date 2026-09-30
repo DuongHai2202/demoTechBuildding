@@ -8,6 +8,9 @@ import com.techbuildding.demoTechBuildding.repository.MaterialRepository;
 import com.techbuildding.demoTechBuildding.repository.MaterialRequestRepository;
 import com.techbuildding.demoTechBuildding.service.MaterialService;
 import com.techbuildding.demoTechBuildding.exception.ResourceNotFoundException;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,11 +29,19 @@ public class MaterialServiceImpl implements MaterialService {
     private final MaterialRepository materialRepository;
     private final MaterialCategoryRepository materialCategoryRepository;
     private final MaterialRequestRepository materialRequestRepository;
+    private final StandardCodeGenerator codeGenerator;
 
 
     @Override
     @CacheEvict(value = "materials", allEntries = true)
     public MaterialResponseDTO createMaterial(MaterialRequestDTO request) {
+        String managementCode = codeGenerator.cleanProvidedCode(request.getManagementCode());
+        if (managementCode == null) {
+            managementCode = codeGenerator.next(StandardCodeType.MATERIAL, materialRepository::existsByManagementCode);
+        } else if (materialRepository.existsByManagementCode(managementCode)) {
+            throw new DuplicateResourceException("Mã vật tư '" + managementCode + "' đã tồn tại.");
+        }
+
         Material material = Material.builder()
                 .nameVi(request.getNameVi())
                 .nameEn(request.getNameEn())
@@ -41,7 +52,7 @@ public class MaterialServiceImpl implements MaterialService {
                 .descriptionVi(request.getDescriptionVi())
                 .descriptionEn(request.getDescriptionEn())
                 .descriptionZh(request.getDescriptionZh())
-                .managementCode(request.getManagementCode())
+                .managementCode(managementCode)
                 .revitFamilyCategory(request.getRevitFamilyCategory())
                 .revitCode(request.getRevitCode())
                 .properties(request.getProperties())
@@ -87,7 +98,14 @@ public class MaterialServiceImpl implements MaterialService {
         if (request.getDescriptionVi() != null) m.setDescriptionVi(request.getDescriptionVi());
         if (request.getDescriptionEn() != null) m.setDescriptionEn(request.getDescriptionEn());
         if (request.getDescriptionZh() != null) m.setDescriptionZh(request.getDescriptionZh());
-        if (request.getManagementCode() != null) m.setManagementCode(request.getManagementCode());
+        if (request.getManagementCode() != null && !request.getManagementCode().isBlank()) {
+            String managementCode = request.getManagementCode().trim();
+            if (!managementCode.equalsIgnoreCase(m.getManagementCode())
+                    && materialRepository.existsByManagementCodeAndIdNot(managementCode, id)) {
+                throw new DuplicateResourceException("Mã vật tư '" + managementCode + "' đã tồn tại.");
+            }
+            m.setManagementCode(managementCode);
+        }
         if (request.getRevitCode() != null) m.setRevitCode(request.getRevitCode());
         if (request.getRevitFamilyCategory() != null) m.setRevitFamilyCategory(request.getRevitFamilyCategory());
         
@@ -111,6 +129,9 @@ public class MaterialServiceImpl implements MaterialService {
         if (request.getNameVi() != null) material.setNameVi(request.getNameVi());
         material.setUnit(request.getUnit());
         material.setRevitCode(request.getRevitCode());
+        if (material.getManagementCode() == null || material.getManagementCode().isBlank()) {
+            material.setManagementCode(codeGenerator.next(StandardCodeType.MATERIAL, materialRepository::existsByManagementCode));
+        }
         material.setRevitFamilyCategory(request.getRevitFamilyCategory());
         material.setProperties(request.getProperties());
         if (request.getDescriptionVi() != null) material.setDescriptionVi(request.getDescriptionVi());

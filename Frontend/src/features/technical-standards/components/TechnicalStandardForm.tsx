@@ -4,14 +4,15 @@ import * as z from 'zod';
 import { useCreateTechnicalStandard } from '../api/technicalStandardApi';
 import { useProjects } from '../../projects/api/projectApi';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  code: z.string().min(1, 'Mã hiệu là bắt buộc'),
-  name: z.string().min(1, 'Tên tiêu chuẩn là bắt buộc'),
-  description: z.string().optional(),
-  category: z.string().min(1, 'Phân loại là bắt buộc'),
-  version: z.string().optional(),
-  projectId: z.number().nullable().optional(),
+  code: optionalCode(),
+  name: requiredText('Tên tiêu chuẩn phải có ít nhất 2 ký tự', 2),
+  description: optionalText(),
+  category: z.enum(['TCVN', 'ASTM', 'EUROCODE', 'IEC', 'INTERNAL']),
+  version: optionalText(),
+  projectId: z.number().finite().nullable().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -61,11 +62,11 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-bold text-[var(--color-text-muted)]">Mã hiệu *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)]">Mã hiệu <span className="text-xs font-normal">(để trống để tự sinh)</span></label>
               <input
                 {...register('code')}
                 className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] focus:ring-2 focus:ring-[var(--color-primary)] outline-none"
-                placeholder="VD: TCVN 9386:2012"
+                placeholder="Tự động: TC-2026-0001 hoặc nhập mã riêng"
               />
               {errors.code && <p className="text-xs text-red-500 font-medium">{errors.code.message}</p>}
             </div>
@@ -86,7 +87,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-bold text-[var(--color-text-muted)]">Tên tiêu chuẩn *</label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)]">Tên tiêu chuẩn <span className="text-rose-500">*</span></label>
             <input
               {...register('name')}
               className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] focus:ring-2 focus:ring-[var(--color-primary)] outline-none"
@@ -108,7 +109,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
             <div className="space-y-1.5">
               <label className="text-sm font-bold text-[var(--color-text-muted)]">Gán cho dự án</label>
               <select
-                {...register('projectId', { valueAsNumber: true })}
+                {...register('projectId', { setValueAs: (value) => value === '' ? null : Number(value) })}
                 className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] focus:ring-2 focus:ring-[var(--color-primary)] outline-none"
               >
                 <option value="">-- Dùng chung toàn công ty --</option>

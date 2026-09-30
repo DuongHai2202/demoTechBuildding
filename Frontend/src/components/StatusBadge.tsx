@@ -15,14 +15,21 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   SUSPENDED: { label: 'Tạm dừng', variant: 'danger' },
   // Material Requests
   PENDING: { label: 'Chờ duyệt', variant: 'warning' },
+  CHECKED: { label: 'Đã kiểm tra', variant: 'info' },
   APPROVED: { label: 'Đã duyệt', variant: 'success' },
   REJECTED: { label: 'Từ chối', variant: 'danger' },
   // Attendance
   CHECKED_IN: { label: 'Đang làm việc', variant: 'info' },
+  MISSING_CHECKOUT: { label: 'Thiếu checkout', variant: 'warning' },
+  PENDING_REVIEW: { label: 'Chờ kiểm tra', variant: 'warning' },
   FAILED: { label: 'Thất bại', variant: 'danger' },
   // General
   ACTIVE: { label: 'Đang hoạt động', variant: 'success' },
   INACTIVE: { label: 'Tạm ngưng', variant: 'danger' },
+  DRAFT: { label: 'Bản nháp', variant: 'warning' },
+  EXPIRED: { label: 'Hết hạn', variant: 'warning' },
+  TERMINATED: { label: 'Đã chấm dứt', variant: 'danger' },
+  CANCELLED: { label: 'Đã hủy', variant: 'danger' },
   // Partners
   CLIENT: { label: 'Chủ đầu tư', variant: 'info' },
   CONTRACTOR: { label: 'Nhà thầu', variant: 'warning' },
@@ -45,7 +52,7 @@ export function StatusBadge({ label, variant, status }: StatusBadgeProps) {
   const displayVariant = variant || (status ? STATUS_MAP[status]?.variant : 'info') || 'info';
 
   return (
-    <span className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider border ${VARIANT_STYLES[displayVariant]}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold leading-none ${VARIANT_STYLES[displayVariant]}`}>
       {displayLabel}
     </span>
   );

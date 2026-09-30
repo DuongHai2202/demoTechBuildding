@@ -31,12 +31,7 @@ public class BiddingController {
     @Operation(summary = "Get all bidding packages")
     @GetMapping("/bidding-packages")
     public ResponseData<List<BiddingPackageResponseDTO>> getAllPackages() {
-        try {
-            return new ResponseData<>(HttpStatus.OK.value(), "Success", biddingService.getAllPackages());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return new ResponseData<>(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error: " + e.getMessage(), null);
-        }
+        return new ResponseData<>(HttpStatus.OK.value(), "Success", biddingService.getAllPackages());
     }
 
     @Operation(summary = "Get bidding packages by project")

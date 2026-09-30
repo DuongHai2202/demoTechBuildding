@@ -20,12 +20,18 @@ const PROJECTS_KEY = ['projects'] as const;
 
 // GET /api/v1/projects
 export function useProjects() {
+  const user = useAuthStore((state) => state.user);
+
   return useQuery({
-    queryKey: PROJECTS_KEY,
+    // Scope the cache by account. Without this, an admin's project list can
+    // briefly appear after switching to a staff account before the request
+    // for the staff member's assigned projects completes.
+    queryKey: [...PROJECTS_KEY, 'accessible', user?.id ?? 'anonymous', (user?.roles || []).join('|')],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<Project[]>>('/projects');
       return data.data;
     },
+    enabled: !!user?.id,
   });
 }
 

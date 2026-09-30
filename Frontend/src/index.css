@@ -1,3 +1,5 @@
+/* Be Vietnam Pro has a generous Vietnamese glyph set and keeps the UI readable and consistent. */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 /* ==============================
@@ -39,8 +41,8 @@
   --color-dark-muted: #64748B;
 
   /* Fonts */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Be Vietnam Pro', 'Segoe UI', system-ui, 'Noto Sans', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Consolas, monospace;
 
   /* Shadows */
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -61,10 +63,10 @@
   --color-border: #E2E8F0;
 
   /* Typography */
-  --color-text-primary: #000000;
-  --color-text-secondary: #262626;
-  --color-text-muted: #525252;
-  --color-text-disabled: #A3A3A3;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748B;
+  --color-text-disabled: #94A3B8;
 
   /* Primary */
   --color-primary: #2563EB;
@@ -125,15 +127,87 @@
    ============================== */
 
 * {
-  transition: var(--theme-transition);
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+  font-size: 16px;
 }
 
 body {
+  margin: 0;
+  min-width: 320px;
   font-family: var(--font-sans);
   background-color: var(--color-bg);
   color: var(--color-text-primary);
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0.002em;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  color: #0F172A;
+  background: #BFDBFE;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 42%, transparent);
+  outline-offset: 2px;
+}
+
+/*
+ * Readability baseline for dense construction-management screens.
+ * Several legacy views used 9–11px labels, which is especially difficult to
+ * read with Vietnamese diacritics. Keep metadata compact, but never smaller
+ * than 12px; normal small UI text is 13–15px.
+ */
+[class~="text-[9px]"],
+[class~="text-[10px]"],
+[class~="text-[11px]"] {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+[class~="text-xs"] {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+[class~="text-sm"] {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ==============================
@@ -146,7 +220,7 @@ body {
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   color: white;
   background-color: var(--color-primary);
@@ -162,7 +236,7 @@ body {
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   color: var(--color-text-primary);
   background-color: transparent;

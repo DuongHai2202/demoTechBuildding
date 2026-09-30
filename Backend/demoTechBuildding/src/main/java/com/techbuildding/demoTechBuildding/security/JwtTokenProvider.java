@@ -239,13 +239,20 @@ public class JwtTokenProvider {
                     .parseClaimsJws(token);
             return true;
         } catch (ExpiredJwtException e) {
-            log.warn("JWT token expired: {}", e.getMessage());
+            log.warn("JWT token expired");
         } catch (MalformedJwtException e) {
-            log.warn("Invalid JWT token: {}", e.getMessage());
+            log.warn("Invalid JWT token format");
         } catch (UnsupportedJwtException e) {
-            log.warn("Unsupported JWT token: {}", e.getMessage());
+            log.warn("Unsupported JWT token");
+        } catch (JwtException e) {
+            // SignatureException (and the other JwtException subclasses) must
+            // be treated as an invalid session, never allowed to bubble up as
+            // a 500 response. This is especially important after a demo
+            // environment has been rebuilt with a different JWT key: the
+            // browser may still hold a token issued by the previous process.
+            log.warn("JWT token validation failed: {}", e.getClass().getSimpleName());
         } catch (IllegalArgumentException e) {
-            log.warn("JWT claims string is empty: {}", e.getMessage());
+            log.warn("JWT claims string is empty or invalid");
         }
         return false;
     }

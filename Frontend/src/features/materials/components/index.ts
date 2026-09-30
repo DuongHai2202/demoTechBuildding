@@ -5,3 +5,4 @@ export * from './MaterialModule';
 export * from './MaterialForm';
 export * from './MaterialRequestForm';
 export * from './MaterialRequestList';
+export * from './MaterialRequestDetailModal';

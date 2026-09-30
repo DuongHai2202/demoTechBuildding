@@ -1,52 +1,94 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateContract, useContracts } from '../api/contractApi';
+import { useCreateContract, useContracts, useUpdateContract } from '../api/contractApi';
+import type { Contract } from '../types/contract.types';
 import { useProjects } from '../../projects/api/projectApi';
 import { usePartners } from '../../partners/api/partnerApi';
-import { DocumentPlusIcon, XMarkIcon, PaperClipIcon } from '@heroicons/react/24/outline';
+import { DocumentPlusIcon, PencilSquareIcon, XMarkIcon, PaperClipIcon } from '@heroicons/react/24/outline';
+import { optionalCode, optionalDate, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  projectId: z.coerce.number().min(1, 'Vui lòng chọn dự án'),
-  contractNumber: z.string().min(3, 'Số hiệu quá ngắn'),
-  contractName: z.string().min(5, 'Tên hợp đồng phải trên 5 ký tự'),
-  partnerId: z.coerce.number().optional(),
-  partnerName: z.string().optional(),
-  contractValue: z.coerce.number().min(0, 'Giá trị không hợp lệ'),
-  status: z.string().default('ACTIVE'),
+  projectId: z.coerce.number().finite().min(1, 'Vui lòng chọn dự án'),
+  contractNumber: optionalCode(),
+  contractName: requiredText('Tên hợp đồng phải trên 5 ký tự', 5),
+  partnerId: z.coerce.number().finite().min(1, 'Vui lòng chọn đối tác'),
+  partnerName: z.string().trim().optional(),
+  contractValue: z.coerce.number().finite('Giá trị phải là số hợp lệ').min(0, 'Giá trị không được âm'),
+  status: z.enum(['ACTIVE', 'PENDING', 'EXPIRED', 'TERMINATED', 'COMPLETED']).default('ACTIVE'),
   type: z.enum(['MAIN', 'ADDENDUM']).default('MAIN'),
-  parentId: z.coerce.number().optional(),
-  workflowStep: z.coerce.number().min(1).max(7).default(1),
-  guaranteeInfo: z.string().optional(),
-  signedDate: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  parentId: z.coerce.number().finite().optional(),
+  workflowStep: z.coerce.number().finite().min(1).max(7).default(1),
+  guaranteeInfo: z.string().trim().optional(),
+  signedDate: optionalDate(),
+  startDate: optionalDate(),
+  endDate: optionalDate(),
+}).superRefine((data, context) => {
+  if (data.type === 'ADDENDUM' && (!data.parentId || data.parentId < 1)) {
+    context.addIssue({ code: 'custom', path: ['parentId'], message: 'Phụ lục phải thuộc một hợp đồng gốc' });
+  }
+  if (data.startDate && data.endDate && data.endDate < data.startDate) {
+    context.addIssue({ code: 'custom', path: ['endDate'], message: 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu' });
+  }
 });
 
 type FormData = z.infer<typeof schema>;
 
 interface ContractFormProps {
   initialProjectId?: number;
+  contract?: Contract;
   onClose: () => void;
 }
 
-export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
+export function ContractForm({ initialProjectId, contract, onClose }: ContractFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const createMutation = useCreateContract();
+  const updateMutation = useUpdateContract();
   const { data: projects } = useProjects();
   const { data: partners } = usePartners();
   const { data: allContracts } = useContracts();
+  const isEditing = Boolean(contract);
 
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema) as any,
     defaultValues: {
-      projectId: initialProjectId,
-      type: 'MAIN',
-      status: 'ACTIVE',
-      workflowStep: 1,
+      projectId: contract?.projectId ?? initialProjectId,
+      contractNumber: contract?.contractNumber ?? '',
+      contractName: contract?.contractName ?? '',
+      partnerId: contract?.partnerId,
+      partnerName: contract?.partnerName ?? '',
+      contractValue: contract?.contractValue ?? 0,
+      type: contract?.type ?? 'MAIN',
+      status: contract?.status ?? 'ACTIVE',
+      parentId: contract?.parentId,
+      workflowStep: contract?.workflowStep ?? 1,
+      guaranteeInfo: contract?.guaranteeInfo ?? '',
+      signedDate: contract?.signedDate ?? '',
+      startDate: contract?.startDate ?? '',
+      endDate: contract?.endDate ?? '',
     }
   });
+
+  useEffect(() => {
+    reset({
+      projectId: contract?.projectId ?? initialProjectId,
+      contractNumber: contract?.contractNumber ?? '',
+      contractName: contract?.contractName ?? '',
+      partnerId: contract?.partnerId,
+      partnerName: contract?.partnerName ?? '',
+      contractValue: contract?.contractValue ?? 0,
+      type: contract?.type ?? 'MAIN',
+      status: contract?.status ?? 'ACTIVE',
+      parentId: contract?.parentId,
+      workflowStep: contract?.workflowStep ?? 1,
+      guaranteeInfo: contract?.guaranteeInfo ?? '',
+      signedDate: contract?.signedDate ?? '',
+      startDate: contract?.startDate ?? '',
+      endDate: contract?.endDate ?? '',
+    });
+    setFile(null);
+  }, [contract, initialProjectId, reset]);
 
   const selectedType = watch('type');
   const selectedProjectId = watch('projectId');
@@ -62,7 +104,11 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
     }
 
     try {
-      await createMutation.mutateAsync({ formData });
+      if (contract) {
+        await updateMutation.mutateAsync({ id: contract.id, formData });
+      } else {
+        await createMutation.mutateAsync({ formData });
+      }
       onClose();
     } catch (error) {
       console.error('Lỗi khi lưu hợp đồng:', error);
@@ -73,8 +119,12 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center border-b border-[var(--color-border)] pb-4">
         <h3 className="text-xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-          <DocumentPlusIcon className="w-6 h-6 text-[var(--color-primary)]" />
-          Thêm hợp đồng mới
+          {isEditing ? (
+            <PencilSquareIcon className="w-6 h-6 text-[var(--color-primary)]" />
+          ) : (
+            <DocumentPlusIcon className="w-6 h-6 text-[var(--color-primary)]" />
+          )}
+          {isEditing ? 'Chỉnh sửa hợp đồng' : 'Thêm hợp đồng mới'}
         </h3>
         <button onClick={onClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors">
           <XMarkIcon className="w-6 h-6" />
@@ -128,10 +178,10 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Số hiệu <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Số hiệu <span className="text-xs font-normal text-[var(--color-text-muted)]">(để trống để tự sinh)</span></label>
             <input 
               {...register('contractNumber')}
-              placeholder="ví dụ: HD-2024-001"
+              placeholder="Tự động: HD-2026-0001 hoặc nhập mã riêng"
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
             {errors.contractNumber && <p className="text-xs text-red-500 mt-1">{errors.contractNumber.message}</p>}
@@ -146,6 +196,7 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
               <option value="PENDING">Đang chờ</option>
               <option value="EXPIRED">Hết hạn</option>
               <option value="TERMINATED">Đã hủy</option>
+              <option value="COMPLETED">Đã hoàn thành</option>
             </select>
           </div>
         </div>
@@ -165,8 +216,10 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
             <select
               {...register('partnerId')}
               onChange={(e) => {
-                const partner = partners?.find(p => p.id === Number(e.target.value));
-                if (partner) setValue('partnerName', partner.name);
+                const partnerId = Number(e.target.value);
+                const partner = partners?.find(p => p.id === partnerId);
+                setValue('partnerId', partnerId || 0, { shouldValidate: true });
+                setValue('partnerName', partner?.name || '');
               }}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             >
@@ -181,36 +234,41 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
 
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày ký</label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày ký (tùy chọn)</label>
             <input 
               type="date"
               {...register('signedDate')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
+            {errors.signedDate && <p className="text-xs text-red-500 mt-1">{errors.signedDate.message}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày bắt đầu</label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày bắt đầu (tùy chọn)</label>
             <input 
               type="date"
               {...register('startDate')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
+            {errors.startDate && <p className="text-xs text-red-500 mt-1">{errors.startDate.message}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày kết thúc</label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Ngày kết thúc (tùy chọn)</label>
             <input 
               type="date"
               {...register('endDate')}
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             />
+            {errors.endDate && <p className="text-xs text-red-500 mt-1">{errors.endDate.message}</p>}
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Giá trị hợp đồng (VND)</label>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">Giá trị hợp đồng (VND) <span className="text-red-500">*</span></label>
             <input 
               type="number"
+              min="0"
+              step="1"
               {...register('contractValue')}
               placeholder="0"
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
@@ -224,13 +282,16 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
               className="w-full p-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all"
             >
               <option value={1}>1. Lập kế hoạch</option>
-              <option value={2}>2. Gửi báo giá</option>
-              <option value={3}>3. Thương thảo hợp đồng</option>
+              <option value={2}>2. Mời báo giá</option>
+              <option value={3}>3. Đánh giá & thương thảo</option>
               <option value={4}>4. Ký hợp đồng</option>
-              <option value={5}>5. Tạm ứng thực hiện</option>
+              <option value={5}>5. Tạm ứng / khởi công</option>
               <option value={6}>6. Thanh toán giai đoạn</option>
-              <option value={7}>7. Quyết toán</option>
+              <option value={7}>7. Quyết toán & đóng</option>
             </select>
+            <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
+              Khi chỉnh sửa, hệ thống vẫn kiểm tra chuyển bước tuần tự và điều kiện bắt buộc. Có thể thao tác chi tiết tại trang hợp đồng.
+            </p>
           </div>
         </div>
 
@@ -248,7 +309,11 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
           <label className="flex flex-col items-center justify-center cursor-pointer text-[var(--color-text-muted)] group-hover:text-[var(--color-primary)]">
             <PaperClipIcon className="w-8 h-8 mb-3" />
             <span className="text-sm font-medium text-[var(--color-text-primary)] text-center">
-              {file ? file.name : "Tải lên bản scan hợp đồng (PDF, Image)"}
+              {file
+                ? file.name
+                : isEditing
+                  ? 'Giữ tài liệu hiện tại hoặc chọn file mới'
+                  : 'Tải lên bản scan hợp đồng (PDF, Image)'}
             </span>
             <span className="text-xs mt-1">Hỗ trợ .pdf, .jpg, .png</span>
             <input 
@@ -269,13 +334,17 @@ export function ContractForm({ initialProjectId, onClose }: ContractFormProps) {
           </button>
           <button 
             type="submit"
-            disabled={createMutation.isPending}
+            disabled={createMutation.isPending || updateMutation.isPending}
             className="flex-1 py-2.5 px-4 rounded-xl bg-[var(--color-primary)] text-white font-medium hover:opacity-90 shadow-sm transition-all disabled:opacity-50 flex justify-center items-center gap-2"
           >
-            {createMutation.isPending && (
+            {(createMutation.isPending || updateMutation.isPending) && (
               <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
             )}
-            {createMutation.isPending ? "Đang lưu..." : "Lưu Hợp đồng"}
+            {createMutation.isPending || updateMutation.isPending
+              ? "Đang lưu..."
+              : isEditing
+                ? "Cập nhật hợp đồng"
+                : "Lưu Hợp đồng"}
           </button>
         </div>
       </form>

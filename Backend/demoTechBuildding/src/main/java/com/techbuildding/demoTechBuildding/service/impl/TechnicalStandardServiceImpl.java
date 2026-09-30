@@ -9,6 +9,9 @@ import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.repository.TechnicalStandardRepository;
 import com.techbuildding.demoTechBuildding.service.StorageService;
 import com.techbuildding.demoTechBuildding.service.TechnicalStandardService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,7 @@ public class TechnicalStandardServiceImpl implements TechnicalStandardService {
     private final TechnicalStandardRepository repository;
     private final ProjectRepository projectRepository;
     private final StorageService storageService;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     @Transactional
@@ -34,8 +38,15 @@ public class TechnicalStandardServiceImpl implements TechnicalStandardService {
                     .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         }
 
+        String code = codeGenerator.cleanProvidedCode(request.getCode());
+        if (code == null) {
+            code = codeGenerator.next(StandardCodeType.TECHNICAL_STANDARD, repository::existsByCode);
+        } else if (repository.existsByCode(code)) {
+            throw new DuplicateResourceException("Mã tiêu chuẩn '" + code + "' đã tồn tại.");
+        }
+
         TechnicalStandard standard = TechnicalStandard.builder()
-                .code(request.getCode())
+                .code(code)
                 .name(request.getName())
                 .description(request.getDescription())
                 .category(request.getCategory())
@@ -58,7 +69,13 @@ public class TechnicalStandardServiceImpl implements TechnicalStandardService {
                     .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
         }
 
-        standard.setCode(request.getCode());
+        if (request.getCode() != null && !request.getCode().isBlank()) {
+            String code = request.getCode().trim();
+            if (!code.equalsIgnoreCase(standard.getCode()) && repository.existsByCodeAndIdNot(code, id)) {
+                throw new DuplicateResourceException("Mã tiêu chuẩn '" + code + "' đã tồn tại.");
+            }
+            standard.setCode(code);
+        }
         standard.setName(request.getName());
         standard.setDescription(request.getDescription());
         standard.setCategory(request.getCategory());

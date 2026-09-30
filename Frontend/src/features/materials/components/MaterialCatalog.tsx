@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   useMaterials, 
   useMaterialCategories 
@@ -12,15 +12,19 @@ import {
   Squares2X2Icon
 } from '@heroicons/react/24/outline';
 import { cn } from '../../../lib/utils';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 9;
 
 export function MaterialCatalog() {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const { data: categories, isLoading: isCategoriesLoading } = useMaterialCategories();
   const { data: materials, isLoading: isMaterialsLoading } = useMaterials();
 
-  const filteredMaterials = materials?.filter(m => {
+  const filteredMaterials = (materials || []).filter(m => {
     const matchesSearch = m.nameVi?.toLowerCase().includes(search.toLowerCase()) || 
                          m.nameEn?.toLowerCase().includes(search.toLowerCase()) ||
                          m.managementCode?.toLowerCase().includes(search.toLowerCase()) ||
@@ -29,6 +33,14 @@ export function MaterialCatalog() {
     
     return matchesSearch && matchesCategory;
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedCategory]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMaterials.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedMaterials = filteredMaterials.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   if (isCategoriesLoading || isMaterialsLoading) return <LoadingSkeleton />;
 
@@ -90,7 +102,7 @@ export function MaterialCatalog() {
         {/* Material Grid */}
         <div className="lg:col-span-3">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredMaterials?.map(material => (
+            {paginatedMaterials.map(material => (
               <div 
                 key={material.id}
                 className="group flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:shadow-lg transition-all"
@@ -168,7 +180,16 @@ export function MaterialCatalog() {
             ))}
           </div>
 
-          {filteredMaterials?.length === 0 && (
+          <Pagination
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={filteredMaterials.length}
+            onPageChange={setPage}
+            itemLabel="vật tư"
+            ariaLabel="Phân trang thư viện vật tư"
+          />
+
+          {filteredMaterials.length === 0 && (
             <div className="py-32 text-center rounded-3xl border-2 border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50">
               <CubeIcon className="size-16 mx-auto text-[var(--color-text-muted)]/30 mb-4" />
               <p className="text-[var(--color-text-muted)] font-medium">Không tìm thấy vật tư nào phù hợp.</p>

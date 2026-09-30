@@ -16,6 +16,16 @@ export interface VerifyOtpRequest {
   otpCode: string;
 }
 
+export interface RegisterResponse {
+  user: {
+    username: string;
+    email?: string;
+  };
+  demoOtp?: string | null;
+  otpExpiresInSeconds: number;
+  emailQueued: boolean;
+}
+
 export interface TokenResponse {
   accessToken: string;
   refreshToken: string;

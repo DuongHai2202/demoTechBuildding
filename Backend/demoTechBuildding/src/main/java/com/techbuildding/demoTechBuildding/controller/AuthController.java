@@ -6,6 +6,7 @@ import com.techbuildding.demoTechBuildding.dto.request.auth.RegisterRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.auth.VerifyOtpRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
 import com.techbuildding.demoTechBuildding.dto.response.auth.TokenResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.auth.RegisterResponseDTO;
 import com.techbuildding.demoTechBuildding.dto.response.user.UserResponseDTO;
 import com.techbuildding.demoTechBuildding.service.impl.AuthServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,10 +35,10 @@ public class AuthController {
      */
     @Operation(summary = "Register a new user", description = "Create a new user with PENDING status. An OTP code will be generated for verification.")
     @PostMapping("/register")
-    public ResponseData<UserResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
+    public ResponseData<RegisterResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
         log.info("Register request for: {}", request.getUsername());
 
-        UserResponseDTO user = authService.register(request);
+        RegisterResponseDTO user = authService.register(request);
         return new ResponseData<>(HttpStatus.CREATED.value(), "User registered. Please verify OTP to activate account.",
                 user);
     }

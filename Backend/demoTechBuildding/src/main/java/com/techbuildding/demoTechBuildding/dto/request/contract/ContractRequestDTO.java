@@ -1,7 +1,6 @@
 package com.techbuildding.demoTechBuildding.dto.request.contract;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,7 +17,6 @@ public class ContractRequestDTO implements Serializable {
     @NotNull(message = "Project ID is required")
     private Integer projectId;
 
-    @NotBlank(message = "Contract number is required")
     private String contractNumber;
 
     private String contractName;

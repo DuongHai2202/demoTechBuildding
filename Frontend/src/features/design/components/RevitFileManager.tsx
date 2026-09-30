@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useBimModels,
   useCreateModel,
@@ -15,13 +15,18 @@ import {
 } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { Pagination } from '../../../components/ui/Pagination';
 
 interface RevitFileManagerProps {
   projectId: number;
   zoneId?: number;
 }
 
+const PAGE_SIZE = 6;
+
 export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
+  const { confirm } = useActionDialog();
   const { data: models, isLoading, refetch } = useBimModels(projectId, zoneId);
   const uploadFileMutation = useUploadBimFile();
   const createModelMutation = useCreateModel();
@@ -29,6 +34,15 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [page, setPage] = useState(1);
+  const modelList = models || [];
+  const totalPages = Math.max(1, Math.ceil(modelList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedModels = modelList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [projectId, zoneId, models?.length]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -73,7 +87,12 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa file mô hình này?')) return;
+    if (!(await confirm({
+      title: 'Xóa mô hình BIM',
+      description: 'File mô hình này sẽ bị xóa khỏi dự án. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa mô hình',
+      variant: 'danger',
+    }))) return;
 
     try {
       await deleteModelMutation.mutateAsync(id);
@@ -145,7 +164,7 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto bg-[var(--color-bg)]/50">
-        {models?.length === 0 ? (
+        {modelList.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-12">
             <div className="size-20 bg-[var(--color-surface-alt)] rounded-full flex items-center justify-center mb-6">
               <CubeIcon className="size-10 text-[var(--color-text-muted)] opacity-20" />
@@ -156,12 +175,13 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
-            {models?.map((model) => (
-              <div
-                key={model.id}
-                className="group flex items-center gap-4 p-4 hover:bg-[var(--color-bg)] transition-all duration-300"
-              >
+          <div className="space-y-4">
+            <div className="divide-y divide-[var(--color-border)] bg-[var(--color-surface)]">
+              {paginatedModels.map((model) => (
+                <div
+                  key={model.id}
+                  className="group flex items-center gap-4 p-4 hover:bg-[var(--color-bg)] transition-all duration-300"
+                >
                 {/* Icon Column */}
                 <div className="size-12 rounded-xl bg-[var(--color-surface-alt)] border border-[var(--color-border)] flex items-center justify-center shrink-0 group-hover:border-[var(--color-primary)] transition-colors">
                   <CubeIcon className="size-6 text-[var(--color-primary)] group-hover:scale-110 transition-transform duration-500" />
@@ -215,8 +235,17 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
                     <TrashIcon className="size-5" />
                   </button>
                 </div>
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
+            <Pagination
+              page={currentPage}
+              pageSize={PAGE_SIZE}
+              total={modelList.length}
+              onPageChange={setPage}
+              itemLabel="mô hình"
+              ariaLabel="Phân trang mô hình BIM"
+            />
           </div>
         )}
       </div>

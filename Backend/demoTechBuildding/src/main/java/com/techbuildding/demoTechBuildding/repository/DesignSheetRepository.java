@@ -10,4 +10,5 @@ import java.util.List;
 public interface DesignSheetRepository extends JpaRepository<DesignSheet, Integer> {
     List<DesignSheet> findByProjectId(Integer projectId);
     List<DesignSheet> findByProjectIdAndZoneId(Integer projectId, Integer zoneId);
+    boolean existsBySheetNumber(String sheetNumber);
 }

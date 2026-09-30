@@ -6,18 +6,24 @@ import { useCreateBiddingPackage } from '../api/biddingApi';
 import { useProjects } from '../../projects/api/projectApi';
 
 import type { BiddingStatus } from '../types/bidding.types';
+import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
   projectId: z.number().min(1, 'Vui lòng chọn dự án'),
-  packageCode: z.string().min(1, 'Mã gói thầu là bắt buộc'),
-  packageName: z.string().min(1, 'Tên gói thầu là bắt buộc'),
-  description: z.string().optional(),
-  budget: z.preprocess((val) => (val === '' || val === undefined ? undefined : Number(val)), z.number().optional()),
-  deadline: z.string().min(1, 'Hạn nộp là bắt buộc'),
+  packageCode: optionalCode(),
+  packageName: requiredText('Tên gói thầu phải có ít nhất 3 ký tự', 3),
+  description: optionalText(),
+  budget: z.preprocess((val) => (val === '' || val === undefined ? undefined : Number(val)), z.number().finite('Ngân sách phải là số hợp lệ').min(0, 'Ngân sách không được âm').optional()),
+  deadline: z.string().min(1, 'Hạn nộp là bắt buộc').refine((value) => !Number.isNaN(new Date(value).getTime()), 'Hạn nộp không đúng định dạng'),
   criteria: z.array(z.object({
-    name: z.string().min(1, 'Tên tiêu chí là bắt buộc'),
-    weight: z.number().min(1).max(100)
+    name: requiredText('Tên tiêu chí phải có ít nhất 2 ký tự', 2),
+    weight: z.number().finite('Trọng số phải là số').min(0, 'Trọng số từ 0 đến 100').max(100, 'Trọng số từ 0 đến 100')
   })).min(1, 'Vui lòng thêm ít nhất một tiêu chí'),
+}).superRefine((data, context) => {
+  const totalWeight = data.criteria.reduce((total, criterion) => total + criterion.weight, 0);
+  if (totalWeight !== 100) {
+    context.addIssue({ code: 'custom', path: ['criteria'], message: 'Tổng trọng số của các tiêu chí phải bằng 100%' });
+  }
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -74,7 +80,7 @@ export function PackageForm({
         {/* Project Selection (only if not provided) */}
         {!initialProjectId && (
           <div className="space-y-1.5 text-left">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Dự án áp dụng</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Dự án áp dụng <span className="text-rose-500">*</span></label>
             <select 
               {...register('projectId', { valueAsNumber: true })}
               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all appearance-none cursor-pointer"
@@ -90,16 +96,16 @@ export function PackageForm({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Mã gói thầu</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Mã gói thầu <span className="font-normal normal-case">(để trống để tự sinh)</span></label>
             <input 
               {...register('packageCode')}
               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all"
-              placeholder="Vd: GT-XD01"
+              placeholder="Tự động: GTH-2026-0001 hoặc nhập mã riêng"
             />
             {errors.packageCode && <p className="text-[10px] text-[var(--color-danger)] font-bold ml-1">{errors.packageCode.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Tên gói thầu</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Tên gói thầu <span className="text-rose-500">*</span></label>
             <input 
               {...register('packageName')}
               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border(--color-primary)] transition-all"
@@ -125,12 +131,15 @@ export function PackageForm({
             <input 
               {...register('budget')}
               type="number"
+              min="0"
+              step="1"
               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-all font-mono font-bold"
               placeholder="0"
             />
+            {errors.budget && <p className="text-[10px] text-[var(--color-danger)] font-bold ml-1">{errors.budget.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Hạn nộp hồ sơ</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block ml-1">Hạn nộp hồ sơ <span className="text-rose-500">*</span></label>
             <input 
               {...register('deadline')}
               type="datetime-local"
@@ -161,17 +170,22 @@ export function PackageForm({
                     placeholder="Tên tiêu chí (vd: Giá, Tiến độ...)"
                     className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
                   />
+                  {errors.criteria?.[index]?.name && <p className="text-[10px] text-[var(--color-danger)] font-bold mt-1">{errors.criteria[index]?.name?.message}</p>}
                 </div>
                 <div className="w-24">
                   <div className="relative">
                     <input 
                       {...register(`criteria.${index}.weight`, { valueAsNumber: true })}
                       type="number"
+                      min="0"
+                      max="100"
+                      step="1"
                       placeholder="%"
                       className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] pl-3 pr-7 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all text-right font-mono font-bold"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[var(--color-text-muted)] font-bold">%</span>
                   </div>
+                  {errors.criteria?.[index]?.weight && <p className="text-[10px] text-[var(--color-danger)] font-bold mt-1">{errors.criteria[index]?.weight?.message}</p>}
                 </div>
                 <button 
                   type="button"

@@ -1,53 +1,113 @@
 import { useEffect, useRef, useState } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
+import { isAxiosError } from 'axios';
+import { api } from '../../../services/axiosInstance';
 import { useAuthStore } from '../../auth/stores/authStore';
 import { useLogFailure } from '../api/attendanceApi';
+import { loadFaceModels } from '../../../utils/faceModels';
 
 interface FaceVerificationModalProps {
   projectId: number;
+  location?: { latitude: number; longitude: number; accuracy: number };
   onSuccess: (file: File) => void;
   onCancel: () => void;
 }
 
-export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVerificationModalProps) {
+export function FaceVerificationModal({ projectId, location, onSuccess, onCancel }: FaceVerificationModalProps) {
   const user = useAuthStore((s) => s.user);
   const logFailureMutation = useLogFailure();
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [status, setStatus] = useState('Đang khởi tạo AI (5-10s)...');
   const [matchStatus, setMatchStatus] = useState<'pending' | 'success' | 'failed'>('pending');
+  const [modelError, setModelError] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
+  const [descriptorLoading, setDescriptorLoading] = useState(true);
+  const [descriptorError, setDescriptorError] = useState(false);
+  const [descriptorErrorMessage, setDescriptorErrorMessage] = useState('Không thể tải dữ liệu sinh trắc học. Vui lòng thử lại.');
+  const [savedDescriptorStr, setSavedDescriptorStr] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const webcamRef = useRef<Webcam>(null);
 
-  const savedDescriptorStr = user?.faceDescriptor;
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDescriptor = async () => {
+      try {
+        setDescriptorLoading(true);
+        setDescriptorError(false);
+        setDescriptorErrorMessage('Không thể tải dữ liệu sinh trắc học. Vui lòng thử lại.');
+        const response = await api.get<{ data?: { registered?: boolean; descriptor?: string | null } }>('/users/me/face-descriptor');
+        if (cancelled) return;
+        const descriptor = response.data?.data?.descriptor;
+        setSavedDescriptorStr(typeof descriptor === 'string' && descriptor.trim() ? descriptor : null);
+      } catch (error) {
+        console.error('Error loading face verification data:', error);
+        if (!cancelled) {
+          const statusCode = isAxiosError(error) ? error.response?.status : undefined;
+          setDescriptorError(true);
+          setDescriptorErrorMessage(
+            statusCode === 401
+              ? 'Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại rồi thử xác thực.'
+              : statusCode === 403
+                ? 'Tài khoản hiện không có quyền truy cập dữ liệu khuôn mặt. Vui lòng liên hệ quản trị viên.'
+                : 'Không thể tải dữ liệu sinh trắc học. Kiểm tra kết nối rồi thử lại.'
+          );
+          setSavedDescriptorStr(null);
+        }
+      } finally {
+        if (!cancelled) setDescriptorLoading(false);
+      }
+    };
+
+    loadDescriptor();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAttempt]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadModels = async () => {
       try {
-        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
-        
+        setModelError(false);
+        setStatus('Đang tải mô hình AI nội bộ...');
+        await loadFaceModels();
+        if (cancelled) return;
         setIsModelLoaded(true);
         setStatus('Đang quét khuôn mặt...');
       } catch (e) {
         console.error('Error loading AI models:', e);
-        setStatus('Lỗi tải dữ liệu AI. Vui lòng kiểm tra mạng.');
+        if (!cancelled) {
+          setModelError(true);
+          setStatus('Không tải được mô hình nhận diện nội bộ. Vui lòng thử lại.');
+        }
       }
     };
     loadModels();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAttempt]);
 
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     
     const verifyFace = async () => {
       // Stop verifying if we already have a successful match
       if (matchStatus === 'success') return;
       
+      if (descriptorLoading) {
+        setStatus('Đang tải dữ liệu sinh trắc học của tài khoản...');
+        return;
+      }
       if (!isModelLoaded || !webcamRef.current || !webcamRef.current.video) return;
+      if (descriptorError) {
+        setStatus(descriptorErrorMessage);
+        setMatchStatus('failed');
+        return;
+      }
       if (!savedDescriptorStr) {
         setStatus('Bạn chưa có dữ liệu sinh trắc học! Vui lòng liên hệ Admin.');
         setMatchStatus('failed');
@@ -64,6 +124,13 @@ export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVe
                                        
         if (detection) {
           const savedArr = JSON.parse(savedDescriptorStr);
+          if (
+            !Array.isArray(savedArr) ||
+            savedArr.length !== 128 ||
+            savedArr.some((value) => typeof value !== 'number' || !Number.isFinite(value))
+          ) {
+            throw new Error('Saved face descriptor is invalid');
+          }
           const savedFloat32 = new Float32Array(savedArr);
           const distance = faceapi.euclideanDistance(detection.descriptor, savedFloat32);
           
@@ -99,16 +166,18 @@ export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVe
           setStatus('Không tìm thấy khuôn mặt rõ ràng tĩnh...');
         }
       } catch (error) {
-         console.error(error);
+         console.error('Face verification failed:', error);
+         setMatchStatus('failed');
+         setStatus('Dữ liệu khuôn mặt không hợp lệ hoặc không thể xác thực. Vui lòng đăng ký lại.');
       }
     };
     
-    if (isModelLoaded && matchStatus !== 'success') {
+    if (isModelLoaded && matchStatus === 'pending' && !descriptorLoading) {
        interval = setInterval(verifyFace, 1500); 
     }
     
     return () => clearInterval(interval);
-  }, [isModelLoaded, savedDescriptorStr, onSuccess, matchStatus]);
+  }, [descriptorError, descriptorErrorMessage, descriptorLoading, isModelLoaded, savedDescriptorStr, onSuccess, matchStatus]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-[2px] p-4 animate-fade-in">
@@ -132,6 +201,13 @@ export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVe
                 audio={false}
                 screenshotFormat="image/jpeg"
                 videoConstraints={{ facingMode: "user" }}
+                onUserMedia={() => setCameraError(false)}
+                onUserMediaError={(error) => {
+                  console.error('Camera error:', error);
+                  setCameraError(true);
+                  setMatchStatus('failed');
+                  setStatus('Không thể truy cập camera. Hãy cấp quyền camera cho trình duyệt rồi thử lại.');
+                }}
                 className={`absolute inset-0 h-full w-full object-cover transition-all ${matchStatus === 'success' ? 'brightness-110' : ''}`}
               />
             )}
@@ -147,6 +223,22 @@ export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVe
           <div className="mt-6 text-center text-sm font-semibold min-h-[40px] px-2 text-[var(--color-text-primary)]">
              {status}
           </div>
+
+          {(modelError || cameraError || descriptorError) && (
+            <button
+              type="button"
+              onClick={() => {
+                setCameraError(false);
+                setDescriptorError(false);
+                setMatchStatus('pending');
+                setIsModelLoaded(false);
+                setLoadAttempt((attempt) => attempt + 1);
+              }}
+              className="mx-auto mt-3 block text-sm font-semibold text-[var(--color-primary)] underline"
+            >
+              Thử tải lại
+            </button>
+          )}
           
           <div className="mt-6 text-center">
             <button 
@@ -155,7 +247,10 @@ export function FaceVerificationModal({ projectId, onSuccess, onCancel }: FaceVe
                   logFailureMutation.mutate({
                     userId: user?.id || 0,
                     projectId: projectId,
-                    reason: `Xác thực khuôn mặt thất bại (${status})`
+                    reason: `Xác thực khuôn mặt thất bại (${status})`,
+                    latitude: location?.latitude,
+                    longitude: location?.longitude,
+                    accuracy: location?.accuracy,
                   });
                 }
                 onCancel();

@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -103,6 +106,43 @@ public class StorageServiceImpl implements StorageService {
         } catch (Exception e) {
             log.error("Failed to download file: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to download file: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public byte[] downloadFileByUrl(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new IllegalArgumentException("File URL không được để trống.");
+        }
+
+        try {
+            URI uri = URI.create(fileUrl);
+            String path = uri.getPath();
+            String bucketPrefix = "/" + bucketName + "/";
+            int objectStart = path.indexOf(bucketPrefix);
+            if (objectStart < 0) {
+                throw new IllegalArgumentException("File URL không thuộc kho lưu trữ của hệ thống.");
+            }
+
+            String objectName = URLDecoder.decode(
+                    path.substring(objectStart + bucketPrefix.length()),
+                    StandardCharsets.UTF_8);
+            if (objectName.isBlank() || objectName.contains("..")) {
+                throw new IllegalArgumentException("Đường dẫn file không hợp lệ.");
+            }
+
+            try (InputStream stream = minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .build())) {
+                return stream.readAllBytes();
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to download file by URL: {}", e.getMessage(), e);
+            throw new RuntimeException("Không thể tải tài liệu từ kho lưu trữ.", e);
         }
     }
 

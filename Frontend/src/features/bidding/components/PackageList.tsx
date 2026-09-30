@@ -1,8 +1,12 @@
+import { useEffect, useState } from 'react';
 import { PlusIcon, EyeIcon, ChartBarIcon, CalendarIcon, TagIcon } from '@heroicons/react/24/outline';
 import { useBiddingPackages } from '../api/biddingApi';
 import type { BiddingPackage } from '../types/bidding.types';
 import { formatCurrency } from '../../../utils/formatCurrency';
 import { formatDate } from '../../../utils/formatDate';
+import { Pagination } from '../../../components/ui/Pagination';
+
+const PAGE_SIZE = 6;
 
 interface PackageListProps {
   projectId: number;
@@ -13,6 +17,16 @@ interface PackageListProps {
 
 export function PackageList({ projectId, onSelect, onCompare, onCreate }: PackageListProps) {
   const { data: packages, isLoading } = useBiddingPackages(projectId);
+  const [page, setPage] = useState(1);
+  const packageList = packages || [];
+
+  useEffect(() => {
+    setPage(1);
+  }, [packageList.length]);
+
+  const totalPages = Math.max(1, Math.ceil(packageList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedPackages = packageList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   if (isLoading) return <div className="p-8 text-center text-[var(--color-text-muted)]">Đang tải danh sách...</div>;
 
@@ -33,7 +47,7 @@ export function PackageList({ projectId, onSelect, onCompare, onCreate }: Packag
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {packages?.map((pkg) => (
+        {paginatedPackages.map((pkg) => (
           <div 
             key={pkg.id} 
             onClick={() => onSelect(pkg)}
@@ -41,7 +55,7 @@ export function PackageList({ projectId, onSelect, onCompare, onCreate }: Packag
           >
             <div className="mb-4 flex items-start justify-between">
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ring-inset ${getStatusStyles(pkg.status)}`}>
-                {pkg.status}
+                {getStatusLabel(pkg.status)}
               </span>
               <span className="text-[10px] font-mono font-bold text-[var(--color-text-muted)] uppercase tracking-tight">#{pkg.packageCode}</span>
             </div>
@@ -73,14 +87,20 @@ export function PackageList({ projectId, onSelect, onCompare, onCreate }: Packag
 
               <div className="flex items-center gap-3 pt-6 border-t border-[var(--color-border)] mt-4">
                 <button 
-                  onClick={() => onSelect(pkg)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelect(pkg);
+                  }}
                   className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] py-2.5 text-xs font-black text-white hover:bg-[var(--color-primary-hover)] shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
                 >
                   <EyeIcon className="size-4" />
                   Chi tiết
                 </button>
                 <button 
-                  onClick={() => onCompare(pkg)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCompare(pkg);
+                  }}
                   className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary-light)] py-2.5 text-xs font-black text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all active:scale-95 cursor-pointer border border-[var(--color-primary)]/10"
                 >
                   <ChartBarIcon className="size-4" />
@@ -92,7 +112,16 @@ export function PackageList({ projectId, onSelect, onCompare, onCreate }: Packag
         ))}
       </div>
 
-      {packages?.length === 0 && (
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={packageList.length}
+        onPageChange={setPage}
+        itemLabel="gói thầu"
+        ariaLabel="Phân trang gói thầu"
+      />
+
+      {packageList.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[var(--color-border)] bg-[var(--color-bg)] py-20">
           <div className="mb-4 rounded-full bg-[var(--color-surface)] p-4 shadow-sm">
             <PlusIcon className="size-8 text-[var(--color-text-muted)]" />
@@ -106,6 +135,9 @@ export function PackageList({ projectId, onSelect, onCompare, onCreate }: Packag
 
 function getStatusStyles(status: string) {
   switch (status) {
+    case 'PENDING': return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)] ring-[var(--color-warning)]/20';
+    case 'OPEN':
+    case 'BIDDING': return 'bg-[var(--color-info-bg)] text-[var(--color-info)] ring-[var(--color-info)]/20';
     case 'PUBLISHED': return 'bg-[var(--color-success-bg)] text-[var(--color-success)] ring-[var(--color-success)]/20';
     case 'INVITING': return 'bg-[var(--color-info-bg)] text-[var(--color-info)] ring-[var(--color-info)]/20';
     case 'EVALUATING': return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)] ring-[var(--color-warning)]/20';
@@ -113,4 +145,20 @@ function getStatusStyles(status: string) {
     case 'CANCELLED': return 'bg-[var(--color-danger-bg)] text-[var(--color-danger)] ring-[var(--color-danger)]/20';
     default: return 'bg-[var(--color-surface-alt)] text-[var(--color-text-disabled)] ring-[var(--color-border)]/20';
   }
+}
+
+function getStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    DRAFT: 'Bản nháp',
+    PENDING: 'Chờ xử lý',
+    PUBLISHED: 'Đã công bố',
+    OPEN: 'Đang nhận hồ sơ',
+    BIDDING: 'Đang đấu thầu',
+    INVITING: 'Đang mời thầu',
+    EVALUATING: 'Đang đánh giá',
+    AWARDED: 'Đã chọn nhà thầu',
+    CLOSED: 'Đã đóng',
+    CANCELLED: 'Đã hủy',
+  };
+  return labels[status] || status || 'Chưa xác định';
 }

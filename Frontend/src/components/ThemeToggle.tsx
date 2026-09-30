@@ -53,12 +53,15 @@ export function ThemeToggle() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-center rounded-lg p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] cursor-pointer"
         title="Chọn giao diện"
+        aria-label="Chọn giao diện"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
       >
         <CurrentIcon className="size-5" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-36 origin-top-right rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-[var(--shadow-dropdown-theme)] z-50">
+        <div role="menu" className="absolute right-0 z-50 mt-2 w-36 origin-top-right rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-[var(--shadow-dropdown-theme)]">
           {THEME_OPTIONS.map((opt) => {
             const Icon = opt.icon;
             const isActive = theme === opt.value;
@@ -69,6 +72,7 @@ export function ThemeToggle() {
                   setTheme(opt.value);
                   setIsOpen(false);
                 }}
+                role="menuitem"
                 className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive
                     ? 'bg-[var(--color-primary-light)] text-[var(--color-primary-hover)] font-medium cursor-pointer'

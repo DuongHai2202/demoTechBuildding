@@ -1,5 +1,3 @@
-import type { ApiResponse } from '../../../types/api.types';
-
 export type DesignDiscipline = 'ARCH' | 'STRUC' | 'MEP' | 'LANDSCAPE' | 'INTERIOR';
 export type DesignStatus = 'PRELIMINARY' | 'FOR_REVIEW' | 'IFC' | 'AS_BUILT';
 
@@ -8,7 +6,7 @@ export interface DesignSheet {
   projectId: number;
   zoneId: number | null;
   zoneName: string | null;
-  sheetNumber: string;
+  sheetNumber?: string;
   title: string;
   discipline: DesignDiscipline;
   revision: string;

@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface PartnerRepository extends JpaRepository<Partner, Integer> {
     Optional<Partner> findByPartnerCode(String partnerCode);
+    boolean existsByPartnerCode(String partnerCode);
+    boolean existsByPartnerCodeAndIdNot(String partnerCode, Integer id);
 }

@@ -1,12 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { api } from '../../services/axiosInstance';
 import type { RoleRequest } from '../../features/users/types/user.types';
 import type { ApiResponse } from '../../types/api.types';
 import { CheckIcon, XMarkIcon, UserPlusIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 import { StatusBadge } from '../../components/StatusBadge';
+import { useActionDialog } from '../../components/ui/ActionDialog';
+import { Pagination } from '../../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 export default function ApprovalRequestsPage() {
+  const { prompt } = useActionDialog();
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
 
   // Fetch all requests
   const { data: requests = [], isLoading } = useQuery({
@@ -30,8 +37,25 @@ export default function ApprovalRequestsPage() {
     },
   });
 
-  const handleAction = (id: number, status: 'APPROVED' | 'REJECTED') => {
-    const note = prompt(status === 'APPROVED' ? 'Ghi chú phê duyệt (tùy chọn):' : 'Lý do từ chối:');
+  useEffect(() => {
+    setPage(1);
+  }, [requests.length]);
+
+  const totalPages = Math.max(1, Math.ceil(requests.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRequests = requests.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const handleAction = async (id: number, status: 'APPROVED' | 'REJECTED') => {
+    const note = await prompt({
+      title: status === 'APPROVED' ? 'Phê duyệt yêu cầu' : 'Từ chối yêu cầu',
+      description: status === 'APPROVED' ? 'Bạn có thể ghi chú cho quyết định phê duyệt.' : 'Vui lòng nhập lý do để người yêu cầu biết cần bổ sung gì.',
+      inputLabel: status === 'APPROVED' ? 'Ghi chú (tùy chọn)' : 'Lý do từ chối',
+      placeholder: status === 'APPROVED' ? 'Nhập ghi chú nếu cần...' : 'Nhập lý do từ chối...',
+      multiline: true,
+      required: status === 'REJECTED',
+      confirmLabel: status === 'APPROVED' ? 'Phê duyệt' : 'Từ chối',
+      variant: status === 'APPROVED' ? 'success' : 'danger',
+    });
     if (status === 'REJECTED' && note === null) return;
     updateStatusMutation.mutate({ id, status, adminNote: note || '' });
   };
@@ -69,7 +93,7 @@ export default function ApprovalRequestsPage() {
                 </td>
               </tr>
             ) : (
-              requests.map((req) => (
+              paginatedRequests.map((req) => (
                 <tr key={req.id} className="hover:bg-[var(--color-bg)] transition-colors group">
                   <td className="px-6 py-4">
                     <div className="font-bold text-[var(--color-text-primary)]">{req.fullName}</div>
@@ -124,6 +148,15 @@ export default function ApprovalRequestsPage() {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={requests.length}
+        onPageChange={setPage}
+        itemLabel="yêu cầu"
+        ariaLabel="Phân trang yêu cầu phê duyệt"
+      />
     </div>
   );
 }

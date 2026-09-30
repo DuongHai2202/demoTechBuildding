@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useContractMaterialLimits, useSetContractMaterialLimit } from '../api/contractApi';
 import { useMaterials } from '../../materials/api/materialApi';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { LoadingSkeleton } from '../../../components/LoadingSkeleton';
+import { Pagination } from '../../../components/ui/Pagination';
 
 interface MaterialLimitTabProps {
   contractId: number;
   filterType?: 'OWNER_SUPPLIED' | 'CONTRACTOR_SUPPLIED'; // New filter prop
 }
+
+const PAGE_SIZE = 10;
 
 export function MaterialLimitTab({ contractId, filterType }: MaterialLimitTabProps) {
   const { data: limits, isLoading: loadingLimits } = useContractMaterialLimits(contractId);
@@ -19,6 +22,7 @@ export function MaterialLimitTab({ contractId, filterType }: MaterialLimitTabPro
   const [limitQuantity, setLimitQuantity] = useState<number | ''>('');
   const [limitType, setLimitType] = useState<'OWNER_SUPPLIED' | 'CONTRACTOR_SUPPLIED'>('CONTRACTOR_SUPPLIED');
   const [notes, setNotes] = useState('');
+  const [page, setPage] = useState(1);
 
   const handleAddLimit = async () => {
     if (!selectedMaterialId || !limitQuantity) return;
@@ -43,6 +47,13 @@ export function MaterialLimitTab({ contractId, filterType }: MaterialLimitTabPro
   const filteredLimits = filterType 
     ? (limits || []).filter(l => l.type === filterType)
     : (limits || []);
+  const totalPages = Math.max(1, Math.ceil(filteredLimits.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLimits = filteredLimits.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [contractId, filterType, limits?.length]);
 
   if (loadingLimits) return <LoadingSkeleton />;
 
@@ -119,53 +130,63 @@ export function MaterialLimitTab({ contractId, filterType }: MaterialLimitTabPro
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-[var(--color-surface-alt)]">
-              <th className="px-4 py-3 text-left font-medium text-[var(--color-text-muted)]">Tên vật tư</th>
-              <th className="px-4 py-3 text-center font-medium text-[var(--color-text-muted)]">Đơn vị</th>
-              {!filterType && <th className="px-4 py-3 text-center font-medium text-[var(--color-text-muted)]">Loại</th>}
-              <th className="px-4 py-3 text-right font-medium text-[var(--color-text-muted)]">Hạn mức</th>
-              <th className="px-4 py-3 text-left font-medium text-[var(--color-text-muted)]">Ghi chú</th>
-              <th className="px-4 py-3 text-right font-medium text-[var(--color-text-muted)] w-16"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredLimits.length === 0 ? (
-              <tr>
-                <td colSpan={filterType ? 5 : 6} className="px-4 py-8 text-center text-[var(--color-text-muted)]">
-                  Chưa có hạn mức vật tư nào được thiết lập.
-                </td>
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[var(--color-surface-alt)]">
+                <th className="px-4 py-3 text-left font-medium text-[var(--color-text-muted)]">Tên vật tư</th>
+                <th className="px-4 py-3 text-center font-medium text-[var(--color-text-muted)]">Đơn vị</th>
+                {!filterType && <th className="px-4 py-3 text-center font-medium text-[var(--color-text-muted)]">Loại</th>}
+                <th className="px-4 py-3 text-right font-medium text-[var(--color-text-muted)]">Hạn mức</th>
+                <th className="px-4 py-3 text-left font-medium text-[var(--color-text-muted)]">Ghi chú</th>
+                <th className="px-4 py-3 text-right font-medium text-[var(--color-text-muted)] w-16"></th>
               </tr>
-            ) : (
-              filteredLimits.map((l) => (
-                <tr key={l.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-alt)]/30">
-                  <td className="px-4 py-3 font-medium">{l.materialName}</td>
-                  <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">{l.materialUnit}</td>
-                  {!filterType && (
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        l.type === 'OWNER_SUPPLIED' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {l.type === 'OWNER_SUPPLIED' ? 'A cấp' : 'Giao khoán'}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-right font-bold text-[var(--color-primary)]">
-                    {new Intl.NumberFormat('vi-VN').format(l.limitQuantity)}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--color-text-muted)]">{l.notes || '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full transition-colors">
-                      <TrashIcon className="size-4" />
-                    </button>
+            </thead>
+            <tbody>
+              {filteredLimits.length === 0 ? (
+                <tr>
+                  <td colSpan={filterType ? 5 : 6} className="px-4 py-8 text-center text-[var(--color-text-muted)]">
+                    Chưa có hạn mức vật tư nào được thiết lập.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                paginatedLimits.map((l) => (
+                  <tr key={l.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-alt)]/30">
+                    <td className="px-4 py-3 font-medium">{l.materialName}</td>
+                    <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">{l.materialUnit}</td>
+                    {!filterType && (
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          l.type === 'OWNER_SUPPLIED' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {l.type === 'OWNER_SUPPLIED' ? 'A cấp' : 'Giao khoán'}
+                        </span>
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-right font-bold text-[var(--color-primary)]">
+                      {new Intl.NumberFormat('vi-VN').format(l.limitQuantity)}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-text-muted)]">{l.notes || '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button className="p-1.5 text-slate-400 hover:text-rose-500 rounded-full transition-colors">
+                        <TrashIcon className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Pagination
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          total={filteredLimits.length}
+          onPageChange={setPage}
+          itemLabel="hạn mức"
+          ariaLabel="Phân trang hạn mức vật tư"
+        />
       </div>
     </div>
   );

@@ -36,6 +36,7 @@ public interface UserMapper {
     @Mapping(target = "avatarUrl", ignore = true)
     @Mapping(target = "deviceId", ignore = true)
     @Mapping(target = "partner", ignore = true)
+    @Mapping(target = "faceDescriptor", ignore = true)
     User toEntity(UserRequestDTO dto);
 
     // ===== Entity → Response DTO =====
@@ -43,6 +44,7 @@ public interface UserMapper {
     @Mapping(target = "partnerId", source = "partner.id")
     @Mapping(target = "partnerName", source = "partner.name")
     @Mapping(target = "hasFaceRegistered", expression = "java(user.getFaceDescriptor() != null && !user.getFaceDescriptor().isEmpty())")
+    @Mapping(target = "faceDescriptor", ignore = true)
     UserResponseDTO toResponseDTO(User user);
 
     // ===== List<Entity> → List<Response DTO> =====

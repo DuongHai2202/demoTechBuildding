@@ -3,6 +3,8 @@ package com.techbuildding.demoTechBuildding.dto.request.project;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,6 +25,8 @@ public class ProjectRequestDTO implements Serializable {
     private String name;
 
     @Schema(description = "Project code", example = "PRJ-001")
+    @Size(max = 50, message = "Mã dự án không được vượt quá 50 ký tự")
+    @Pattern(regexp = "^(?:$|[A-Za-z0-9][A-Za-z0-9._/-]{0,49})$", message = "Mã dự án chỉ gồm chữ cái, số và các ký tự - . / _")
     private String projectCode;
 
     @Schema(description = "Project description", example = "Dự án xây dựng chung cư cao cấp tại Quận 7")

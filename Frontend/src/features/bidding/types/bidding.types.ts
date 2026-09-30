@@ -1,9 +1,9 @@
-export type BiddingStatus = 'DRAFT' | 'PUBLISHED' | 'INVITING' | 'EVALUATING' | 'CLOSED' | 'CANCELLED';
+export type BiddingStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'OPEN' | 'BIDDING' | 'INVITING' | 'EVALUATING' | 'AWARDED' | 'CLOSED' | 'CANCELLED';
 
 export interface BiddingPackage {
   id: number;
   projectId: number;
-  packageCode: string;
+  packageCode?: string;
   packageName: string;
   description?: string;
   budget?: number;

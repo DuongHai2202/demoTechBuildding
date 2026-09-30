@@ -4,16 +4,20 @@ import com.techbuildding.demoTechBuildding.dto.request.worklog.WorkLogRequestDTO
 import com.techbuildding.demoTechBuildding.dto.response.worklog.WorkLogResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.MediaAttachment;
 import com.techbuildding.demoTechBuildding.entity.Project;
+import com.techbuildding.demoTechBuildding.entity.ProjectMember;
 import com.techbuildding.demoTechBuildding.entity.User;
 import com.techbuildding.demoTechBuildding.entity.WorkLog;
 import com.techbuildding.demoTechBuildding.mapper.WorkLogMapper;
 import com.techbuildding.demoTechBuildding.repository.MediaAttachmentRepository;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
+import com.techbuildding.demoTechBuildding.repository.ProjectMemberRepository;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.repository.WorkLogRepository;
 import com.techbuildding.demoTechBuildding.service.StorageService;
 import com.techbuildding.demoTechBuildding.service.WorkLogService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,6 +34,7 @@ public class WorkLogServiceImpl implements WorkLogService {
 
     private final WorkLogRepository workLogRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final MediaAttachmentRepository mediaAttachmentRepository;
     private final StorageService storageService;
@@ -54,6 +60,10 @@ public class WorkLogServiceImpl implements WorkLogService {
                     return userRepository.findById(request.getUserId())
                         .orElseThrow(() -> new RuntimeException("User not found: " + username));
                 });
+
+        // A staff account may only create a field log for an active project
+        // assignment. Admin/PM are allowed to operate across projects.
+        validateProjectAccess(request.getProjectId(), user.getId());
 
         WorkLog workLog = workLogMapper.toEntity(request);
         workLog.setProject(project);
@@ -90,6 +100,7 @@ public class WorkLogServiceImpl implements WorkLogService {
 
     @Override
     public List<WorkLogResponseDTO> getLogsByProject(Integer projectId) {
+        validateProjectAccess(projectId, null);
         return workLogRepository.findByProjectId(projectId).stream()
                 .map(log -> getLogById(log.getId()))
                 .collect(Collectors.toList());
@@ -97,7 +108,28 @@ public class WorkLogServiceImpl implements WorkLogService {
 
     @Override
     public List<WorkLogResponseDTO> getAllLogs() {
-        return workLogRepository.findAll().stream()
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new AccessDeniedException("Bạn cần đăng nhập để xem nhật ký.");
+        }
+
+        boolean isManager = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_PM"));
+
+        List<WorkLog> logs = workLogRepository.findAll();
+        if (!isManager) {
+            User currentUser = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new AccessDeniedException("Không xác định được tài khoản hiện tại."));
+            Set<Integer> accessibleProjectIds = projectMemberRepository.findByUserId(currentUser.getId()).stream()
+                    .filter(ProjectMember::isActive)
+                    .map(member -> member.getProject().getId())
+                    .collect(Collectors.toSet());
+            logs = logs.stream()
+                    .filter(log -> log.getProject() != null && accessibleProjectIds.contains(log.getProject().getId()))
+                    .collect(Collectors.toList());
+        }
+
+        return logs.stream()
                 .map(log -> getLogById(log.getId()))
                 .collect(Collectors.toList());
     }
@@ -164,5 +196,30 @@ public class WorkLogServiceImpl implements WorkLogService {
             return ((UserDetails) principal).getUsername();
         }
         return principal.toString();
+    }
+
+    private void validateProjectAccess(Integer projectId, Long requestedUserId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new AccessDeniedException("Bạn cần đăng nhập để xem hoặc tạo nhật ký.");
+        }
+
+        boolean isManager = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_PM"));
+        if (isManager) return;
+
+        Long userId = requestedUserId;
+        if (userId == null) {
+            userId = userRepository.findByUsername(auth.getName())
+                    .map(User::getId)
+                    .orElseThrow(() -> new AccessDeniedException("Không xác định được tài khoản hiện tại."));
+        }
+
+        boolean activeMember = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .map(member -> member.isActive())
+                .orElse(false);
+        if (!activeMember) {
+            throw new AccessDeniedException("Bạn chưa được phân công vào dự án này.");
+        }
     }
 }

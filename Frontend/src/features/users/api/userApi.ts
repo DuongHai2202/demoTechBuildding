@@ -54,3 +54,25 @@ export function useDeleteUser() {
   });
 }
 
+// POST /api/v1/users/:id/restore
+export function useRestoreUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.post(`/users/${id}/restore`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+  });
+}
+
+// DELETE /api/v1/users/:id/hard (irreversible, administrator-only)
+export function useHardDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/users/${id}/hard`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+  });
+}
+

@@ -9,6 +9,9 @@ import com.techbuildding.demoTechBuildding.repository.ContractRepository;
 import com.techbuildding.demoTechBuildding.repository.DrawingRepository;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.service.DrawingService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +25,7 @@ public class DrawingServiceImpl implements DrawingService {
     private final DrawingRepository drawingRepository;
     private final ProjectRepository projectRepository;
     private final ContractRepository contractRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
     public DrawingResponseDTO createDrawing(DrawingRequestDTO request) {
@@ -34,11 +38,18 @@ public class DrawingServiceImpl implements DrawingService {
                     .orElseThrow(() -> new RuntimeException("Contract not found: " + request.getContractId()));
         }
 
+        String drawingNumber = codeGenerator.cleanProvidedCode(request.getDrawingNumber());
+        if (drawingNumber == null) {
+            drawingNumber = codeGenerator.next(StandardCodeType.DRAWING, drawingRepository::existsByDrawingNumber);
+        } else if (drawingRepository.existsByDrawingNumber(drawingNumber)) {
+            throw new DuplicateResourceException("Số hiệu bản vẽ '" + drawingNumber + "' đã tồn tại.");
+        }
+
         Drawing drawing = Drawing.builder()
                 .project(project)
                 .contract(contract)
                 .name(request.getName())
-                .drawingNumber(request.getDrawingNumber())
+                .drawingNumber(drawingNumber)
                 .fileUrl(request.getFileUrl())
                 .version(request.getVersion())
                 .build();

@@ -33,4 +33,11 @@ public interface StorageService {
      * @return file content as byte array
      */
     byte[] downloadFile(String folder, String filename);
+
+    /**
+     * Download an object from a URL previously returned by uploadFile.
+     * The URL is resolved back to an object key on the configured bucket so
+     * callers do not need direct/public storage access.
+     */
+    byte[] downloadFileByUrl(String fileUrl);
 }

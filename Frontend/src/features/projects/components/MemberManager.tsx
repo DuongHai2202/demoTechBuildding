@@ -5,12 +5,14 @@ import { DataTable, type ColumnDef } from '../../../components/ui/DataTable';
 import type { ProjectMember } from '../types/project.types';
 import { Button } from '../../../components/ui/Button';
 import { UserPlusIcon, TrashIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 
 interface MemberManagerProps {
   projectId: number;
 }
 
 export function MemberManager({ projectId }: MemberManagerProps) {
+  const { confirm } = useActionDialog();
   const { data: members, isLoading } = useProjectMembers(projectId);
   const addMemberMutation = useAddProjectMember(projectId);
   const removeMemberMutation = useRemoveProjectMember(projectId);
@@ -43,8 +45,13 @@ export function MemberManager({ projectId }: MemberManagerProps) {
     });
   };
 
-  const handleRemoveMember = (userId: number, username: string) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xóa nhân sự "${username}" khỏi dự án này không?`)) {
+  const handleRemoveMember = async (userId: number, username: string) => {
+    if (await confirm({
+      title: 'Xóa nhân sự khỏi dự án',
+      description: `Nhân sự "${username}" sẽ bị gỡ khỏi dự án này. Bạn có chắc muốn tiếp tục?`,
+      confirmLabel: 'Gỡ khỏi dự án',
+      variant: 'danger',
+    })) {
       removeMemberMutation.mutate(userId);
     }
   };

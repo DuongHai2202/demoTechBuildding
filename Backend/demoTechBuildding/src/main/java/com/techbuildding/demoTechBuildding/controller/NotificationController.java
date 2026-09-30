@@ -2,9 +2,14 @@ package com.techbuildding.demoTechBuildding.controller;
 
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
 import com.techbuildding.demoTechBuildding.dto.response.notification.NotificationResponseDTO;
+import com.techbuildding.demoTechBuildding.entity.User;
+import com.techbuildding.demoTechBuildding.exception.ResourceNotFoundException;
+import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,23 +20,33 @@ import java.util.List;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
 
-    // Get my notifications (Assuming current user ID is handled by a helper or extracted from token)
-    // For now, let's pass userId in param for simplicity or assume it's extracted from context later
-    @GetMapping("/me/{userId}")
-    public ResponseData<List<NotificationResponseDTO>> getMyNotifications(@PathVariable("userId") Long userId) {
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseData<List<NotificationResponseDTO>> getMyNotifications(Authentication authentication) {
+        Long userId = currentUserId(authentication);
         return new ResponseData<>(HttpStatus.OK.value(), "Success", notificationService.getMyNotifications(userId));
     }
 
     @PatchMapping("/{id}/read")
-    public ResponseData<Void> markAsRead(@PathVariable("id") Long id) {
-        notificationService.markAsRead(id);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseData<Void> markAsRead(@PathVariable("id") Long id, Authentication authentication) {
+        notificationService.markAsRead(currentUserId(authentication), id);
         return new ResponseData<>(HttpStatus.OK.value(), "Marked as read");
     }
 
-    @PatchMapping("/me/{userId}/read-all")
-    public ResponseData<Void> markAllAsRead(@PathVariable("userId") Long userId) {
+    @PatchMapping("/me/read-all")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseData<Void> markAllAsRead(Authentication authentication) {
+        Long userId = currentUserId(authentication);
         notificationService.markAllAsRead(userId);
         return new ResponseData<>(HttpStatus.OK.value(), "All marked as read");
+    }
+
+    private Long currentUserId(Authentication authentication) {
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản hiện tại."));
+        return user.getId();
     }
 }

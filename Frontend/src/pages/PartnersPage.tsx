@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { 
   MagnifyingGlassIcon, 
@@ -24,6 +24,10 @@ import type { Partner, PartnerRequest } from '../features/partners/types/partner
 import PartnerLinkModal from './PartnerLinkModal';
 import { StatusBadge } from '../components/StatusBadge';
 import { useMemo } from 'react';
+import { useActionDialog } from '../components/ui/ActionDialog';
+import { Pagination } from '../components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 const INITIAL_FORM: PartnerRequest = { 
   name: '', 
@@ -39,11 +43,13 @@ const INITIAL_FORM: PartnerRequest = {
 };
 
 export default function PartnersPage() {
+  const { confirm } = useActionDialog();
   const { data: partners, isLoading } = usePartners();
   const createPartner = useCreatePartner();
   const updatePartnerMut = useUpdatePartner();
   const deletePartner = useDeletePartner();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<PartnerRequest>(INITIAL_FORM);
@@ -65,9 +71,43 @@ export default function PartnersPage() {
   };
 
   const handleSubmit = () => {
-    if (!form.name.trim()) return;
+    const name = form.name.trim();
+    const partnerCode = form.partnerCode.trim();
+    const taxCode = form.taxCode?.trim() || '';
+    const phone = form.phone?.trim() || '';
+    const email = form.email?.trim() || '';
+    if (name.length < 2) {
+      toast.error('Tên đối tác phải có ít nhất 2 ký tự.');
+      return;
+    }
+    if (partnerCode && !/^[A-Za-z0-9._/-]{2,50}$/.test(partnerCode)) {
+      toast.error('Mã đối tác chỉ gồm chữ cái, số và các ký tự - . / _.');
+      return;
+    }
+    if (taxCode && !/^\d{10}(?:\d{3})?$/.test(taxCode)) {
+      toast.error('Mã số thuế phải gồm 10 hoặc 13 chữ số.');
+      return;
+    }
+    if (phone && !/^(?:\+84|0)(?:3|5|7|8|9)\d{8}$/.test(phone.replace(/\s+/g, ''))) {
+      toast.error('Số điện thoại không đúng định dạng.');
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Email không đúng định dạng.');
+      return;
+    }
+    const invalidPriceRow = priceRows.find(row => row.item.trim() && (!row.price.trim() || Number(row.price) < 0 || !Number.isFinite(Number(row.price))));
+    const incompletePriceRow = priceRows.find(row => !row.item.trim() && row.price.trim());
+    if (invalidPriceRow) {
+      toast.error('Đơn giá phải là số không âm cho từng hạng mục.');
+      return;
+    }
+    if (incompletePriceRow) {
+      toast.error('Vui lòng nhập tên hạng mục trước khi nhập đơn giá.');
+      return;
+    }
     
-    const dataToSubmit = { ...form };
+    const dataToSubmit = { ...form, name, partnerCode, taxCode, phone, email };
     
     // Convert price rows back to JSON object
     const unitPricesObj: Record<string, any> = {};
@@ -134,6 +174,14 @@ export default function PartnersPage() {
     );
   }, [partners, search]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedPartners = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -191,7 +239,7 @@ export default function PartnersPage() {
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] border-b pb-2">Thông tin cơ bản</h4>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Tên đối tác *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Tên đối tác * <span className="font-normal normal-case">(tối thiểu 2 ký tự)</span></label>
                     <input
                       placeholder="Tên đối tác"
                       value={form.name}
@@ -201,7 +249,7 @@ export default function PartnersPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Mã đối tác</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Mã đối tác <span className="font-normal normal-case">(để trống để tự sinh)</span></label>
                       <input
                         placeholder="Mã số"
                         value={form.partnerCode}
@@ -210,7 +258,7 @@ export default function PartnersPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Mã số thuế</label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5 block">Mã số thuế <span className="font-normal normal-case">(10/13 số, tùy chọn)</span></label>
                       <input
                         placeholder="MST"
                         value={form.taxCode}
@@ -246,6 +294,7 @@ export default function PartnersPage() {
                         placeholder="0xxx xxx xxx"
                         value={form.phone}
                         onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                        type="tel"
                         className="w-full rounded-md border border-[var(--color-border)] pl-9 pr-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] bg-[var(--color-surface-alt)]"
                       />
                     </div>
@@ -284,13 +333,14 @@ export default function PartnersPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Email công ty</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-[var(--color-text-disabled)] mb-1.5 block px-1">Email công ty <span className="font-normal normal-case">(tùy chọn, đúng định dạng)</span></label>
                     <div className="relative">
                       <EnvelopeIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--color-text-muted)]" />
                       <input
                         placeholder="email@example.com"
                         value={form.email}
                         onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                        type="email"
                         className="w-full rounded-md border border-[var(--color-border)] pl-9 pr-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] bg-[var(--color-surface-alt)]"
                       />
                     </div>
@@ -367,6 +417,8 @@ export default function PartnersPage() {
                           <td className="px-3 py-2">
                             <input
                               type="number"
+                              min="0"
+                              step="0.01"
                               value={row.price}
                               onChange={(e) => updatePriceRow(row.id, 'price', e.target.value)}
                               placeholder="0.00"
@@ -444,7 +496,7 @@ export default function PartnersPage() {
                     <button onClick={() => {setForm(INITIAL_FORM); setShowForm(true);}} className="text-[var(--color-primary)] text-sm mt-2 hover:underline">Thêm mới</button>
                   </td>
                 </tr>
-              ) : filtered.map((p: Partner) => (
+              ) : paginatedPartners.map((p: Partner) => (
                 <tr 
                   key={p.id} 
                   onClick={() => startEdit(p)}
@@ -512,7 +564,15 @@ export default function PartnersPage() {
                         <UserPlusIcon className="size-4" />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); if (confirm(`Xóa đối tác "${p.name}"?`)) deletePartner.mutate(p.id); }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (await confirm({
+                            title: 'Xóa đối tác',
+                            description: `Đối tác "${p.name}" sẽ bị xóa khỏi danh sách. Bạn có chắc muốn tiếp tục?`,
+                            confirmLabel: 'Xóa đối tác',
+                            variant: 'danger',
+                          })) deletePartner.mutate(p.id);
+                        }}
                         className="p-2 rounded-lg text-[var(--color-text-primary)] hover:bg-[var(--color-danger-bg)] hover:text-red-600 transition-colors"
                         title="Xóa đối tác"
                       >
@@ -526,6 +586,15 @@ export default function PartnersPage() {
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={currentPage}
+        pageSize={PAGE_SIZE}
+        total={filtered.length}
+        onPageChange={setPage}
+        itemLabel="đối tác"
+        ariaLabel="Phân trang đối tác"
+      />
 
       {linkPartner && (
         <PartnerLinkModal 

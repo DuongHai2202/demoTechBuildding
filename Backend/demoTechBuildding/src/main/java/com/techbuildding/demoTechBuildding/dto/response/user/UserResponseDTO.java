@@ -25,6 +25,7 @@ public class UserResponseDTO implements Serializable {
     private String email;
     private String avatarUrl;
     private UserStatus status;
+    private boolean deleted;
     private LocalDateTime createdAt;
     private List<String> roles;
     private Integer partnerId;

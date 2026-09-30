@@ -5,8 +5,12 @@ import com.techbuildding.demoTechBuildding.dto.response.partner.PartnerResponseD
 import com.techbuildding.demoTechBuildding.entity.Partner;
 import com.techbuildding.demoTechBuildding.repository.PartnerRepository;
 import com.techbuildding.demoTechBuildding.service.PartnerService;
+import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
+import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -16,12 +20,21 @@ import java.util.stream.Collectors;
 public class PartnerServiceImpl implements PartnerService {
 
     private final PartnerRepository partnerRepository;
+    private final StandardCodeGenerator codeGenerator;
 
     @Override
+    @Transactional
     public PartnerResponseDTO createPartner(PartnerRequestDTO request) {
+        String partnerCode = codeGenerator.cleanProvidedCode(request.getPartnerCode());
+        if (partnerCode == null) {
+            partnerCode = codeGenerator.next(StandardCodeType.PARTNER, partnerRepository::existsByPartnerCode);
+        } else if (partnerRepository.existsByPartnerCode(partnerCode)) {
+            throw new DuplicateResourceException("Mã đối tác '" + partnerCode + "' đã tồn tại.");
+        }
+
         Partner p = Partner.builder()
                 .name(request.getName())
-                .partnerCode(request.getPartnerCode())
+                .partnerCode(partnerCode)
                 .taxCode(request.getTaxCode())
                 .address(request.getAddress())
                 .contactPerson(request.getContactPerson())
@@ -48,11 +61,19 @@ public class PartnerServiceImpl implements PartnerService {
     }
 
     @Override
+    @Transactional
     public PartnerResponseDTO updatePartner(Integer id, PartnerRequestDTO request) {
         Partner p = partnerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Partner not found: " + id));
         p.setName(request.getName());
-        p.setPartnerCode(request.getPartnerCode());
+        String partnerCode = codeGenerator.cleanProvidedCode(request.getPartnerCode());
+        if (partnerCode != null && !partnerCode.equalsIgnoreCase(p.getPartnerCode())
+                && partnerRepository.existsByPartnerCodeAndIdNot(partnerCode, id)) {
+            throw new DuplicateResourceException("Mã đối tác '" + partnerCode + "' đã tồn tại.");
+        }
+        if (partnerCode != null) {
+            p.setPartnerCode(partnerCode);
+        }
         p.setTaxCode(request.getTaxCode());
         p.setAddress(request.getAddress());
         p.setContactPerson(request.getContactPerson());

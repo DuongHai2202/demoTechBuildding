@@ -8,7 +8,8 @@ import type {
   CreateMaterialRequest, 
   MaterialNorm, 
   MaterialNormRequest,
-  MaterialCategory
+  MaterialCategory,
+  MaterialRequestStatus,
 } from '../types/material.types';
 
 const MATERIALS_KEY = ['materials'] as const;
@@ -135,24 +136,25 @@ export function useDeleteMaterialNorm() {
 
 // --- Material Requests (MR Workflow) ---
 
-export function useAllMaterialRequests() {
+export function useAllMaterialRequests(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: MATERIAL_REQUESTS_KEY,
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<MaterialRequest[]>>('/material-requests');
       return data.data;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useProjectMaterialRequests(projectId: number) {
+export function useProjectMaterialRequests(projectId: number, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...MATERIAL_REQUESTS_KEY, 'project', projectId],
     queryFn: async () => {
       const { data } = await api.get<ApiResponse<MaterialRequest[]>>(`/material-requests/project/${projectId}`);
       return data.data;
     },
-    enabled: projectId > 0,
+    enabled: projectId > 0 && (options?.enabled ?? true),
   });
 }
 
@@ -173,7 +175,10 @@ export function useCreateMaterialRequest() {
 export function useUpdateMaterialRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, payload }: { id: number; payload: Partial<CreateMaterialRequest> }) => {
+    mutationFn: async ({ id, payload }: {
+      id: number;
+      payload: Partial<CreateMaterialRequest> & { status?: MaterialRequestStatus };
+    }) => {
       const { data } = await api.put<ApiResponse<MaterialRequest>>(`/material-requests/${id}`, payload);
       return data.data;
     },

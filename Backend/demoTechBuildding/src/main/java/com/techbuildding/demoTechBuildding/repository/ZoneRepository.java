@@ -10,4 +10,5 @@ import java.util.List;
 public interface ZoneRepository extends JpaRepository<Zone, Integer> {
     List<Zone> findByProjectId(Integer projectId);
     List<Zone> findByProjectIdAndParentIsNull(Integer projectId);
+    boolean existsByZoneCode(String zoneCode);
 }

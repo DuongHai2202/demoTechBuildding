@@ -2,6 +2,7 @@ package com.techbuildding.demoTechBuildding.service;
 
 import com.techbuildding.demoTechBuildding.dto.request.user.UserRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.user.UserResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.user.FaceVerificationDataDTO;
 
 import java.util.List;
 
@@ -20,5 +21,11 @@ public interface UserService {
 
     void deleteUser(Long id);
 
+    void restoreUser(Long id);
+
+    void hardDeleteUser(Long id);
+
     UserResponseDTO saveFaceDescriptor(String username, String faceDescriptor);
+
+    FaceVerificationDataDTO getMyFaceVerificationData(String username);
 }

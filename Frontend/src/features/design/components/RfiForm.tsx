@@ -6,14 +6,15 @@ import { useProjectMembers } from '../../projects/api/projectApi';
 import { useDesignSheets } from '../api/designApi';
 import type { ProjectMember } from '../../projects/types/project.types';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { optionalText, requiredText } from '../../../utils/validation';
 
 const schema = z.object({
-  title: z.string().min(1, 'Tiêu đề là bắt buộc'),
-  question: z.string().min(1, 'Nội dung câu hỏi là bắt buộc'),
-  suggestedSolution: z.string(),
-  assignedTo: z.string(),
-  designSheetId: z.string(),
-  status: z.string(),
+  title: requiredText('Tiêu đề phải có ít nhất 3 ký tự', 3),
+  question: requiredText('Nội dung câu hỏi phải có ít nhất 10 ký tự', 10),
+  suggestedSolution: optionalText(),
+  assignedTo: optionalText(),
+  designSheetId: optionalText(),
+  status: z.enum(['OPEN', 'PENDING', 'RESOLVED', 'CLOSED']),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -69,7 +70,7 @@ export function RfiForm({
 
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tiêu đề RFI</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Tiêu đề RFI <span className="text-rose-500">*</span></label>
             <input 
               {...register('title')}
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
@@ -79,7 +80,7 @@ export function RfiForm({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Nội dung câu hỏi</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Nội dung câu hỏi <span className="text-rose-500">*</span></label>
             <textarea 
               {...register('question')}
               rows={4}
@@ -101,7 +102,7 @@ export function RfiForm({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Giao cho xử lý</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Giao cho xử lý <span className="font-normal normal-case">(tùy chọn)</span></label>
               <select 
                 {...register('assignedTo')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"
@@ -113,7 +114,7 @@ export function RfiForm({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Bản vẽ liên quan</label>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-text-muted)]">Bản vẽ liên quan <span className="font-normal normal-case">(tùy chọn)</span></label>
               <select 
                 {...register('designSheetId')}
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] transition-all"

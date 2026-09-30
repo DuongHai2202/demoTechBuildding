@@ -11,4 +11,6 @@ public interface TechnicalStandardRepository extends JpaRepository<TechnicalStan
     List<TechnicalStandard> findByProjectId(Integer projectId);
     List<TechnicalStandard> findByProjectIsNull(); // Global standards
     List<TechnicalStandard> findByProjectIdOrProjectIsNull(Integer projectId);
+    boolean existsByCode(String code);
+    boolean existsByCodeAndIdNot(String code, Long id);
 }

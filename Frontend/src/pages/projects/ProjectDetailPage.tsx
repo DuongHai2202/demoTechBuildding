@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useProject, useProjectSlides, useCreateSlide, useDeleteSlide, useMyProjectPermission } from '../../features/projects/api/projectApi';
 import { toast } from 'sonner';
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
@@ -26,7 +26,11 @@ import { api } from '../../services/axiosInstance';
 import type { ApiResponse } from '../../types/api.types';
 import { DesignModule } from '../../features/design/components/DesignModule';
 import { BiddingModule } from '../../features/bidding/components/BiddingModule';
+import { useActionDialog } from '../../components/ui/ActionDialog';
 import { MaterialModule } from '../../features/materials/components/MaterialModule';
+import { Pagination } from '../../components/ui/Pagination';
+
+const SLIDE_PAGE_SIZE = 8;
 
 const STATUS_MAP: Record<string, { label: string; variant: 'success' | 'info' | 'warning' | 'danger' }> = {
   PLANNING: { label: 'Đang nghiên cứu', variant: 'warning' },
@@ -48,6 +52,7 @@ const TABS = [
 ];
 
 export default function ProjectDetailPage() {
+  const { confirm } = useActionDialog();
   const { id } = useParams();
   const projectId = Number(id);
   const { data: project, isLoading } = useProject(projectId);
@@ -59,6 +64,15 @@ export default function ProjectDetailPage() {
   const [showContractForm, setShowContractForm] = useState(false);
   const { data: contracts, isLoading: isLoadingContracts } = useProjectContracts(projectId);
   const permissions = useMyProjectPermission(projectId);
+  const [slidePage, setSlidePage] = useState(1);
+  const slideList = slides || [];
+  const totalSlidePages = Math.max(1, Math.ceil(slideList.length / SLIDE_PAGE_SIZE));
+  const currentSlidePage = Math.min(slidePage, totalSlidePages);
+  const paginatedSlides = slideList.slice((currentSlidePage - 1) * SLIDE_PAGE_SIZE, currentSlidePage * SLIDE_PAGE_SIZE);
+
+  useEffect(() => {
+    setSlidePage(1);
+  }, [projectId, slides?.length]);
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -115,8 +129,13 @@ export default function ProjectDetailPage() {
     uploadAndCreateSlides(e.dataTransfer.files);
   }, [uploadAndCreateSlides]);
 
-  const handleDeleteSlide = (slideId: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa ảnh này?')) {
+  const handleDeleteSlide = async (slideId: number) => {
+    if (await confirm({
+      title: 'Xóa ảnh công trình',
+      description: 'Ảnh này sẽ bị xóa khỏi nhật ký hình ảnh của dự án. Bạn có chắc muốn tiếp tục?',
+      confirmLabel: 'Xóa ảnh',
+      variant: 'danger',
+    })) {
       deleteSlide.mutate(slideId);
     }
   };
@@ -340,9 +359,9 @@ export default function ProjectDetailPage() {
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
               Hình ảnh dự án
-              {slides && slides.length > 0 && (
+              {slideList.length > 0 && (
                 <span className="ml-2 text-sm font-normal text-[var(--color-text-muted)]">
-                  ({slides.length} ảnh)
+                  ({slideList.length} ảnh)
                 </span>
               )}
             </h3>
@@ -407,7 +426,7 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* Images Grid */}
-          {(slides || []).length === 0 && !uploading ? (
+          {slideList.length === 0 && !uploading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <PhotoIcon className="h-12 w-12 text-[var(--color-text-muted)] mb-3" />
               <p className="text-sm font-medium text-[var(--color-text-secondary)]">
@@ -415,37 +434,47 @@ export default function ProjectDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {(slides || []).map(slide => (
-                <div
-                  key={slide.id}
-                  className="group relative rounded-xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm hover:shadow-md transition-all"
-                >
-                  <div className="aspect-[4/3] overflow-hidden">
-                    <img
-                      src={slide.imageUrl}
-                      alt={slide.caption || ''}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {paginatedSlides.map(slide => (
+                  <div
+                    key={slide.id}
+                    className="group relative rounded-xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm hover:shadow-md transition-all"
+                  >
+                    <div className="aspect-[4/3] overflow-hidden">
+                      <img
+                        src={slide.imageUrl}
+                        alt={slide.caption || ''}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    {/* Caption */}
+                    <div className="px-3 py-2 border-t border-[var(--color-border)]">
+                      <p className="text-xs text-[var(--color-text-muted)] truncate">
+                        {slide.caption || 'Không có chú thích'}
+                      </p>
+                    </div>
+                    {/* Delete overlay */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        onClick={() => handleDeleteSlide(slide.id)}
+                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg"
+                        title="Xóa ảnh"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
-                  {/* Caption */}
-                  <div className="px-3 py-2 border-t border-[var(--color-border)]">
-                    <p className="text-xs text-[var(--color-text-muted)] truncate">
-                      {slide.caption || 'Không có chú thích'}
-                    </p>
-                  </div>
-                  {/* Delete overlay */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button
-                      onClick={() => handleDeleteSlide(slide.id)}
-                      className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg"
-                      title="Xóa ảnh"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <Pagination
+                page={currentSlidePage}
+                pageSize={SLIDE_PAGE_SIZE}
+                total={slideList.length}
+                onPageChange={setSlidePage}
+                itemLabel="ảnh"
+                ariaLabel="Phân trang hình ảnh dự án"
+              />
             </div>
           )}
         </div>

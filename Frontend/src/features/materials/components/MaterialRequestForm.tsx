@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { toast } from 'sonner';
 import { 
   useMaterials, 
   useCreateMaterialRequest, 
@@ -9,11 +10,15 @@ import {
 } from '../api/materialApi';
 import { useAuthStore } from '../../auth/stores/authStore';
 import type { MaterialRequest } from '../types/material.types';
+import { optionalText } from '../../../utils/validation';
 
 const schema = z.object({
-  materialId: z.coerce.number().min(1, 'Vui lòng chọn vật tư'),
-  requestedQuantity: z.coerce.number().min(0.01, 'Số lượng phải lớn hơn 0'),
-  notes: z.string().optional(),
+  materialId: z.coerce.number().finite().min(1, 'Vui lòng chọn vật tư'),
+  requestedQuantity: z.coerce.number().finite('Số lượng phải là số hợp lệ').min(0.01, 'Số lượng phải lớn hơn 0'),
+  notes: optionalText().refine(
+    (value) => !value || value.length <= 2000,
+    'Ghi chú không được vượt quá 2.000 ký tự'
+  ),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -42,17 +47,23 @@ export function MaterialRequestForm({ projectId, onClose, initialData }: Materia
   });
 
   useEffect(() => {
-    if (initialData) {
+    // The material catalogue is loaded asynchronously. Resetting before the
+    // options exist makes a native select fall back to its empty option, so
+    // apply the edit value again after the catalogue has arrived.
+    if (initialData && materials) {
       reset({
         materialId: initialData.materialId,
         requestedQuantity: initialData.requestedQuantity,
         notes: initialData.notes || '',
       });
     }
-  }, [initialData, reset]);
+  }, [initialData, materials, reset]);
 
   const onSubmit = async (data: FormData) => {
-    if (!user) return;
+    if (!user) {
+      toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return;
+    }
     try {
       if (isEdit && initialData) {
         await updateMutation.mutateAsync({
@@ -73,9 +84,11 @@ export function MaterialRequestForm({ projectId, onClose, initialData }: Materia
           notes: data.notes
         });
       }
+      toast.success(isEdit ? 'Đã cập nhật yêu cầu vật tư.' : 'Đã tạo yêu cầu vật tư.');
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Lỗi khi lưu yêu cầu:', error);
+      toast.error(error?.response?.data?.message || 'Không thể lưu yêu cầu vật tư.');
     }
   };
 
@@ -120,6 +133,7 @@ export function MaterialRequestForm({ projectId, onClose, initialData }: Materia
           <input
             type="number"
             step="0.01"
+            min="0.01"
             {...register('requestedQuantity')}
             placeholder="0.00"
             className={`w-full p-3.5 rounded-2xl border bg-[var(--color-bg)] text-[var(--color-text-primary)] text-sm font-bold outline-none transition-all ${
@@ -143,6 +157,9 @@ export function MaterialRequestForm({ projectId, onClose, initialData }: Materia
             rows={4}
             className="w-full p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-primary)] text-sm outline-none focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/10 transition-all resize-none shadow-inner"
           />
+          {errors.notes && (
+            <p className="mt-1 text-xs font-medium text-[var(--color-danger)] ml-1">{errors.notes.message}</p>
+          )}
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-6 border-t border-[var(--color-border)] border-dashed mt-8">

@@ -7,6 +7,8 @@ import com.techbuildding.demoTechBuildding.entity.RoleRequest;
 import com.techbuildding.demoTechBuildding.entity.User;
 import com.techbuildding.demoTechBuildding.entity.UserHasRole;
 import com.techbuildding.demoTechBuildding.repository.*;
+import com.techbuildding.demoTechBuildding.exception.BadRequestException;
+import com.techbuildding.demoTechBuildding.exception.ProtectedResourceException;
 import com.techbuildding.demoTechBuildding.service.RoleRequestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,6 +82,10 @@ public class RoleRequestServiceImpl implements RoleRequestService {
         RoleRequest roleRequest = roleRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
+        if (!"PENDING".equalsIgnoreCase(roleRequest.getStatus())) {
+            throw new BadRequestException("Yêu cầu cấp quyền này đã được xử lý trước đó.");
+        }
+
         roleRequest.setStatus(status);
         roleRequest.setAdminNote(adminNote);
 
@@ -88,18 +94,22 @@ public class RoleRequestServiceImpl implements RoleRequestService {
             User user = roleRequest.getUser();
             Role role = roleRequest.getRequestedRole();
 
-            // Check if user already has this role to avoid duplicate
-            boolean alreadyHasRole = user.getUserHasRoles().stream()
-                    .anyMatch(uhr -> uhr.getRole().getName().equals(role.getName()));
-
-            if (!alreadyHasRole) {
-                UserHasRole userHasRole = UserHasRole.builder()
-                        .user(user)
-                        .role(role)
-                        .build();
-                userHasRoleRepository.save(userHasRole);
-                log.info("Role {} assigned to user {}", role.getName(), user.getUsername());
+            if ("admin".equalsIgnoreCase(user.getUsername()) && !"ADMIN".equals(role.getName())) {
+                throw new ProtectedResourceException("Tài khoản quản trị hệ thống admin được bảo vệ và không thể hạ cấp.");
             }
+
+            // The account model has exactly one global role. Replacing the
+            // existing assignment prevents permission unions such as
+            // GUEST + STAFF or STAFF + PM after an approval.
+            userHasRoleRepository.deleteByUserId(user.getId());
+            user.getUserHasRoles().clear();
+            UserHasRole userHasRole = UserHasRole.builder()
+                    .user(user)
+                    .role(role)
+                    .build();
+            user.getUserHasRoles().add(userHasRole);
+            userHasRoleRepository.save(userHasRole);
+            log.info("Role {} assigned as the only role for user {}", role.getName(), user.getUsername());
 
             // Notify User
             notificationService.sendNotification(

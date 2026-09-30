@@ -3,6 +3,7 @@ package com.techbuildding.demoTechBuildding.service;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckInRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -44,6 +45,9 @@ public interface AttendanceService {
      * Get today's check-in record for a user on a project (null if not checked in).
      */
     AttendanceResponseDTO getTodayRecord(Long userId, Integer projectId);
+
+    /** Finalize a calculated overtime amount. Only ADMIN/PM may review it. */
+    AttendanceResponseDTO reviewOvertime(Long attendanceId, OvertimeReviewRequestDTO request);
 
     /**
      * Log a failed attendance attempt (e.g. from frontend geofencing or face mismatch).

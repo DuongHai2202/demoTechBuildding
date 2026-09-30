@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
-import type { Attendance, CheckInRequest, CheckOutRequest } from '../types/attendance.types';
+import type { Attendance, CheckInRequest, CheckOutRequest, OvertimeReviewRequest } from '../types/attendance.types';
+import type { ShiftAssignment, ShiftAssignmentRequest, ShiftTemplate, ShiftTemplateRequest } from '../types/shift.types';
 
 const ATTENDANCE_KEY = ['attendance'] as const;
 
@@ -56,7 +57,7 @@ export function useCheckOut() {
 }
 
 // GET /api/v1/attendance/personal/:userId
-export function usePersonalHistory(userId: number, startDate: string, endDate: string) {
+export function usePersonalHistory(userId: number, startDate: string, endDate: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...ATTENDANCE_KEY, 'personal', userId, startDate, endDate],
     queryFn: async () => {
@@ -65,7 +66,7 @@ export function usePersonalHistory(userId: number, startDate: string, endDate: s
       });
       return data.data;
     },
-    enabled: !!userId,
+    enabled: !!userId && (options?.enabled ?? true),
   });
 }
 
@@ -84,7 +85,7 @@ export function useProjectHistory(projectId: number, startDate: string, endDate:
 }
 
 // GET /api/v1/attendance
-export function useAllAttendance(startDate: string, endDate: string) {
+export function useAllAttendance(startDate: string, endDate: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...ATTENDANCE_KEY, 'all', startDate, endDate],
     queryFn: async () => {
@@ -93,11 +94,12 @@ export function useAllAttendance(startDate: string, endDate: string) {
       });
       return data.data;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
 // GET /api/v1/attendance/today
-export function useTodayRecord(userId: number, projectId: number, date: string) {
+export function useTodayRecord(userId: number, projectId: number, date: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...ATTENDANCE_KEY, 'today', userId, projectId, date],
     queryFn: async () => {
@@ -106,7 +108,7 @@ export function useTodayRecord(userId: number, projectId: number, date: string) 
       });
       return data?.data ?? null;
     },
-    enabled: !!userId && !!projectId,
+    enabled: !!userId && !!projectId && (options?.enabled ?? true),
   });
 }
 
@@ -115,12 +117,27 @@ export function useLogFailure() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { userId: number; projectId: number; reason: string; latitude?: number; longitude?: number }) => {
+    mutationFn: async (payload: { userId: number; projectId: number; reason: string; latitude?: number; longitude?: number; accuracy?: number }) => {
       await api.post('/attendance/log-failure', payload);
     },
     onSuccess: (_, variables) => {
       // Invalidate project history to reflect the new failure log in the admin view
       queryClient.invalidateQueries({ queryKey: [...ATTENDANCE_KEY, 'project', variables.projectId] });
+    },
+  });
+}
+
+// PATCH /api/v1/attendance/:id/overtime
+export function useReviewOvertime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ attendanceId, request }: { attendanceId: number; request: OvertimeReviewRequest }) => {
+      const { data } = await api.patch<ApiResponse<Attendance>>(`/attendance/${attendanceId}/overtime`, request);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
     },
   });
 }
@@ -140,3 +157,80 @@ export const exportAttendanceExcel = async (projectId: number, startDate: string
   link.click();
   link.remove();
 };
+
+const SHIFT_KEY = [...ATTENDANCE_KEY, 'shifts'] as const;
+
+// GET /api/v1/shifts/assignments/current
+export function useCurrentShift(userId: number, projectId: number, date: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...SHIFT_KEY, 'current', userId, projectId, date],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<ShiftAssignment>>('/shifts/assignments/current', {
+        params: { userId, projectId, date },
+      });
+      return data?.data ?? null;
+    },
+    enabled: !!userId && !!projectId && (options?.enabled ?? true),
+  });
+}
+
+export function useShiftTemplates(projectId?: number) {
+  return useQuery({
+    queryKey: [...SHIFT_KEY, 'templates', projectId ?? 'all'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<ShiftTemplate[]>>('/shifts/templates', {
+        params: projectId ? { projectId } : undefined,
+      });
+      return data.data;
+    },
+  });
+}
+
+export function useShiftAssignments(params: { from: string; to: string; projectId?: number; userId?: number }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...SHIFT_KEY, 'assignments', params],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<ShiftAssignment[]>>('/shifts/assignments', { params });
+      return data.data;
+    },
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useCreateShiftAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ShiftAssignmentRequest) => {
+      const { data } = await api.post<ApiResponse<ShiftAssignment>>('/shifts/assignments', payload);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+    },
+  });
+}
+
+export function useCancelShiftAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (assignmentId: number) => {
+      await api.delete(`/shifts/assignments/${assignmentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+    },
+  });
+}
+
+export function useCreateShiftTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ShiftTemplateRequest) => {
+      const { data } = await api.post<ApiResponse<ShiftTemplate>>('/shifts/templates', payload);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...SHIFT_KEY, 'templates'] });
+    },
+  });
+}
