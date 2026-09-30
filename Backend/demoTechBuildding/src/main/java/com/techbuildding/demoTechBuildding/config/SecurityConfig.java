@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,11 +58,16 @@ public class SecurityConfig {
                 // Disable CSRF (not needed for stateless JWT)
                 .csrf(AbstractHttpConfigurer::disable)
 
+                // Allow browser preflight requests and apply the configured
+                // allow-list before JWT authorization is evaluated.
+                .cors(Customizer.withDefaults())
+
                 // Stateless session: no session stored on server
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // Authorization rules
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
 
                         // Account and role administration are system-admin only.

@@ -1,5 +1,7 @@
 server:
-  port: 8080
+  # Render injects PORT at runtime. Keep 8080 for local Docker/IDE runs.
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
 
 # Local demo helpers. Set APP_DEMO_AUTO_FILL_OTP=false in production; the
 # email delivery and Redis verification flow remains enabled in both modes.
@@ -8,13 +10,15 @@ app:
     auto-fill-otp: ${APP_DEMO_AUTO_FILL_OTP:true}
   auth:
     otp-expiry-minutes: ${OTP_EXPIRY_MINUTES:5}
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}"
 
 spring:
   application:
     name: techbuilding-backend
   
   datasource:
-    url: jdbc:mysql://localhost:3308/${MYSQL_DATABASE:techbuilding_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_0900_ai_ci
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3308}/${MYSQL_DATABASE:techbuilding_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_0900_ai_ci
     username: ${MYSQL_USER:tech_user}
     password: ${MYSQL_PASSWORD:tech_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -70,7 +74,7 @@ minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9090}
   access-key: ${MINIO_ROOT_USER:admin}
   secret-key: ${MINIO_ROOT_PASSWORD:admin123}
-  bucket-name: techbuilding-storage
+  bucket-name: ${MINIO_BUCKET_NAME:techbuilding-storage}
 
 # JWT Configuration
 jwt:
@@ -85,5 +89,5 @@ openapi:
     title: TechBuilding API
     version: 1.0.0
     description: API quản lý thi công xây dựng - TechBuilding Backend
-    serverUrl: http://localhost:8080
+    serverUrl: ${OPENAPI_SERVER_URL:http://localhost:8080}
     api-docs: techbuilding-service
