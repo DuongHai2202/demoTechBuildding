@@ -2,6 +2,7 @@ package com.techbuildding.demoTechBuildding.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseError;
+import com.techbuildding.demoTechBuildding.exception.ApiErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +31,10 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
             HttpServletResponse response,
             AuthenticationException authException) throws IOException {
 
-        log.warn("Unauthorized access attempt: {} {}", request.getMethod(), request.getRequestURI());
+        log.warn("API authentication required code={} method={} path={}",
+                ApiErrorCode.AUTHENTICATION_REQUIRED,
+                request.getMethod(),
+                request.getRequestURI());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
@@ -38,7 +42,9 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
         ResponseError error = new ResponseError(
                 HttpStatus.UNAUTHORIZED.value(),
-                "Unauthorized: Please provide a valid access token");
+                ApiErrorCode.AUTHENTICATION_REQUIRED,
+                "Vui lòng đăng nhập để sử dụng chức năng này.",
+                null);
 
         objectMapper.writeValue(response.getOutputStream(), error);
     }

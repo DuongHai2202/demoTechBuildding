@@ -13,8 +13,14 @@ export function useNotifications(enabled = true) {
       return data.data;
     },
     enabled,
-    staleTime: 10_000,
-    refetchInterval: 30_000,
+    // There is no socket channel in the current deployment, so keep the
+    // notification center near-realtime without polling while the tab is
+    // hidden. Assignment notifications normally appear within five seconds.
+    staleTime: 3_000,
+    refetchInterval: enabled ? 5_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 

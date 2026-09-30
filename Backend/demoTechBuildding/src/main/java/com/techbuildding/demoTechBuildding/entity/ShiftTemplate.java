@@ -58,7 +58,7 @@ public class ShiftTemplate extends AbstractEntity<Long> {
 
     @Builder.Default
     @Column(name = "late_check_in_minutes", nullable = false)
-    private Integer lateCheckInMinutes = 120;
+    private Integer lateCheckInMinutes = 30;
 
     /** Whether time worked after the scheduled end can be submitted for approval. */
     @Builder.Default

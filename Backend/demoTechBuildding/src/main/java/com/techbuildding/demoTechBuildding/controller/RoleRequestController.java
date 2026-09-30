@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class RoleRequestController {
 
     @Operation(summary = "Submit a role/permission request (for GUESTS or existing users)")
     @PostMapping
+    @PreAuthorize("isAuthenticated()")
     public ResponseData<RoleRequestResponseDTO> submitRequest(@RequestBody RoleRequestDTO request) {
         // Get current user ID from security context (via AuthService utility)
         Long userId = authService.getCurrentUser().getId();
@@ -31,8 +33,18 @@ public class RoleRequestController {
         return new ResponseData<>(HttpStatus.CREATED.value(), "Request submitted successfully", result);
     }
 
+    @Operation(summary = "List the current user's role/permission requests")
+    @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseData<List<RoleRequestResponseDTO>> getMyRequests() {
+        Long userId = authService.getCurrentUser().getId();
+        List<RoleRequestResponseDTO> result = roleRequestService.getRequestsForUser(userId);
+        return new ResponseData<>(HttpStatus.OK.value(), "Fetched current user requests", result);
+    }
+
     @Operation(summary = "List all role requests (Admin only)")
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<List<RoleRequestResponseDTO>> getAllRequests() {
         List<RoleRequestResponseDTO> result = roleRequestService.getAllRequests();
         return new ResponseData<>(HttpStatus.OK.value(), "Fetched all requests", result);
@@ -40,6 +52,7 @@ public class RoleRequestController {
 
     @Operation(summary = "Approve or Reject a role request (Admin only)")
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseData<RoleRequestResponseDTO> updateStatus(
             @PathVariable("id") Long id,
             @RequestParam("status") String status,

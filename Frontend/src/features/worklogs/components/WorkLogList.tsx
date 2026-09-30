@@ -22,6 +22,7 @@ import {
   FaceFrownIcon
 } from '@heroicons/react/24/outline';
 import { Pagination } from '../../../components/ui/Pagination';
+import { AuthenticatedImage } from '../../../components/ui/AuthenticatedImage';
 
 const PAGE_SIZE = 6;
 
@@ -189,22 +190,19 @@ export function WorkLogList({ projectId }: WorkLogListProps) {
               {log.mediaUrls && log.mediaUrls.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {log.mediaUrls.map((url, idx) => (
-                    <a 
+                    <div
                       key={idx} 
-                      href={url} 
-                      target="_blank" 
-                      rel="noreferrer"
                       className="group/img relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm"
                     >
-                      <img 
-                        src={url} 
-                        alt="Site" 
+                      <AuthenticatedImage
+                        fileUrl={url}
+                        alt={`Ảnh hiện trường ${idx + 1}`}
                         className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500"
                       />
                       <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                         <PhotoIcon className="w-6 h-6 text-white" />
                       </div>
-                    </a>
+                    </div>
                   ))}
                 </div>
               )}

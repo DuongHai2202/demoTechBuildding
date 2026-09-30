@@ -5,9 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface RoleRequestRepository extends JpaRepository<RoleRequest, Long> {
-    List<RoleRequest> findByUserId(Long userId);
+    List<RoleRequest> findByUserIdOrderByCreatedAtDesc(Long userId);
+    Optional<RoleRequest> findFirstByUserIdAndStatusIgnoreCaseOrderByCreatedAtDesc(Long userId, String status);
     List<RoleRequest> findByStatus(String status);
 }

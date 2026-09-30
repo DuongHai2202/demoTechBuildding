@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -8,19 +8,13 @@ import { useVerifyOtp } from '../api/authApi';
 import { type VerifyOtpFormData, verifyOtpSchema } from '../types/auth.schemas';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
-
-type ApiError = Error & {
-  response?: {
-    data?: {
-      message?: string;
-    };
-  };
-};
+import { getApiErrorInfo } from '../../../services/apiError';
 
 export function VerifyOtpForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const verifyMutation = useVerifyOtp();
+  const [supportCode, setSupportCode] = useState<string | null>(null);
 
   // Retrieve username from registration step (if passed via state)
   const registrationState = (location.state || {}) as {
@@ -62,9 +56,10 @@ export function VerifyOtpForm() {
           onSuccess: () => {
              navigate('/login', { state: { message: 'Xác thực thành công. Vui lòng đăng nhập.' } });
           },
-          onError: (err: ApiError) => {
-            const message = err.response?.data?.message || 'Xác thực thất bại hoặc mã OTP không đúng.';
-            setError('root', { type: 'manual', message });
+          onError: (err: unknown) => {
+            const info = getApiErrorInfo(err, 'Xác thực thất bại. Vui lòng kiểm tra mã OTP và thử lại.');
+            setSupportCode(info.supportCode ?? null);
+            setError('root', { type: 'manual', message: info.message });
           },
         }
       );
@@ -96,7 +91,12 @@ export function VerifyOtpForm() {
 
       {errors.root && (
         <div className="rounded-lg bg-[var(--color-danger-bg)] p-3 text-sm text-[var(--color-danger)]">
-          {errors.root.message}
+          <p>{errors.root.message}</p>
+          {supportCode && (
+            <p className="mt-1 text-xs opacity-75">
+              Mã hỗ trợ: {supportCode}. Chỉ cung cấp mã này khi liên hệ quản trị viên.
+            </p>
+          )}
         </div>
       )}
 

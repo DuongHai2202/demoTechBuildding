@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useProjects } from '../../features/projects/api/projectApi';
 import { AttendanceAdminList } from '../../features/attendance/components/AttendanceAdminList';
-import { ShiftAssignmentPanel } from '../../features/attendance/components/ShiftAssignmentPanel';
 import { 
   BuildingOffice2Icon, 
-  ChevronRightIcon 
+  ChevronRightIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { Pagination } from '../../components/ui/Pagination';
 
@@ -163,7 +164,21 @@ export default function AttendanceManagementPage() {
             </div>
           </div>
 
-          <ShiftAssignmentPanel projectId={selectedProjectId} />
+          <section className="flex flex-col gap-4 rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-primary-light)]/35 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-[var(--color-text-primary)]">Phân công nhân sự và ca làm</h3>
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
+                Phân ca và mở <strong>chấm công đặc thù</strong> thực hiện tại tab <strong>Nhân sự tham gia</strong>. Màn hình này theo dõi nhật ký, xác minh lỗi và duyệt tăng ca.
+              </p>
+            </div>
+            <Link
+              to={`/projects/${selectedProjectId}?tab=members`}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] px-3.5 py-2 text-xs font-bold text-white transition-opacity hover:opacity-90"
+            >
+              Mở phân ca &amp; chấm đặc thù
+              <ArrowTopRightOnSquareIcon className="size-4" />
+            </Link>
+          </section>
           <AttendanceAdminList projectId={selectedProjectId} />
         </div>
       )}

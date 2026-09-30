@@ -3,6 +3,7 @@ import { api } from '../../../services/axiosInstance';
 import { toast } from 'sonner';
 import type { ApiResponse } from '../../../types/api.types';
 import type { WorkLog } from '../types/worklog.types';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 const WORKLOGS_KEY = ['worklogs'] as const;
 
@@ -76,8 +77,8 @@ export function useCheckWorkLog() {
       queryClient.invalidateQueries({ queryKey: [...WORKLOGS_KEY] });
       toast.success('Đã chuyển trạng thái sang: KIỂM TRA');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi kiểm tra: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi kiểm tra: ${getApiErrorMessage(err, 'Không thể chuyển nhật ký sang trạng thái kiểm tra.')}`);
     }
   });
 }
@@ -96,8 +97,8 @@ export function useApproveWorkLog() {
       queryClient.invalidateQueries({ queryKey: [...WORKLOGS_KEY] });
       toast.success('Đã PHÊ DUYỆT nhật ký thi công');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi phê duyệt: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi phê duyệt: ${getApiErrorMessage(err, 'Không thể phê duyệt nhật ký.')}`);
     }
   });
 }
@@ -116,8 +117,8 @@ export function useRejectWorkLog() {
       queryClient.invalidateQueries({ queryKey: [...WORKLOGS_KEY] });
       toast.success('Đã TỪ CHỐI nhật ký thi công');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi từ chối: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi từ chối: ${getApiErrorMessage(err, 'Không thể từ chối nhật ký.')}`);
     }
   });
 }

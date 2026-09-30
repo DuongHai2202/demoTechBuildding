@@ -28,6 +28,7 @@ import { useAuthStore } from '../features/auth/stores/authStore';
 import { hasPermission } from '../features/auth/authorization';
 import { DataTable, type ColumnDef } from '../components/ui/DataTable';
 import { useActionDialog } from '../components/ui/ActionDialog';
+import { getApiErrorMessage } from '../services/apiError';
 
 const MaterialManagementPage: React.FC = () => {
   const { confirm } = useActionDialog();
@@ -77,9 +78,8 @@ const MaterialManagementPage: React.FC = () => {
       console.log(`${actionModal.actionType} successful`);
       setActionModal({ isOpen: false, reqId: null, actionType: null });
       toast.success('Thao tác thành công');
-    } catch (err: any) {
-      console.error(`Error during ${actionModal.actionType}:`, err);
-      toast.error(`Lỗi khi thực hiện: ${err?.response?.data?.message || err.message}`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Không thể thực hiện thao tác vật tư. Vui lòng thử lại.'));
     }
   };
 

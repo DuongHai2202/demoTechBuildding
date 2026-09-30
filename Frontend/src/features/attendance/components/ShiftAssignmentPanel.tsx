@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
-import { isAxiosError } from 'axios';
 import { CalendarDaysIcon, ClockIcon, UserPlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useActionDialog } from '../../../components/ui/ActionDialog';
 import { Button } from '../../../components/ui/Button';
 import { useProjectMembers } from '../../projects/api/projectApi';
 import {
   useCancelShiftAssignment,
+  useCreateFullDayShiftAssignment,
   useCreateShiftAssignment,
   useShiftAssignments,
   useShiftTemplates,
 } from '../api/attendanceApi';
 import type { ShiftTemplate } from '../types/shift.types';
 import { getLocalDateInputValue } from '../utils/attendanceTime';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 interface ShiftAssignmentPanelProps {
   projectId: number;
@@ -29,10 +30,12 @@ function overtimePolicyText(template: ShiftTemplate) {
   if (template.overtimeEligible && (isAfternoon || isFullDay)) {
     return isAfternoon
       ? 'Chỉ xét tăng ca khi đã hoàn tất ca sáng 08:00–12:00; thời gian sau 17:30 tối thiểu 60 phút và tối đa 210 phút.'
-      : 'Chỉ xét tăng ca sau khi hoàn tất đủ ca hành chính; thời gian sau 17:30 tối thiểu 60 phút và tối đa 210 phút.';
+      : 'Full ca được checkout một lần lúc kết thúc ca; thời gian sau 17:30 được xét tăng ca tối thiểu 60 phút và tối đa 210 phút.';
   }
   return 'Ca này không tự phát sinh tăng ca. Ca đêm và ca làm một buổi không được tính tăng ca.';
 }
+
+const FULL_DAY_VALUE = 'FULL_DAY';
 
 export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
   const { confirm } = useActionDialog();
@@ -51,6 +54,7 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
     projectId,
   });
   const createAssignment = useCreateShiftAssignment();
+  const createFullDayAssignment = useCreateFullDayShiftAssignment();
   const cancelAssignment = useCancelShiftAssignment();
 
   const activeMembers = useMemo(
@@ -58,7 +62,15 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
     [members],
   );
 
-  const selectedTemplate = templates?.find((template) => template.id === Number(selectedTemplateId));
+  const fullDayTemplate = templates?.find((template) =>
+    !template.crossesMidnight && formatTime(template.startTime) === '08:00' && formatTime(template.endTime) === '17:30'
+      && template.overtimeEligible,
+  );
+  const selectedTemplate = selectedTemplateId === FULL_DAY_VALUE
+    ? fullDayTemplate
+    : templates?.find((template) => template.id === Number(selectedTemplateId));
+  const isFullDay = selectedTemplateId === FULL_DAY_VALUE;
+  const isFullDayReady = Boolean(fullDayTemplate);
 
   const submit = () => {
     setFormError(null);
@@ -66,6 +78,31 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
       setFormError('Vui lòng chọn nhân viên, mẫu ca và ngày làm việc.');
       return;
     }
+
+    if (isFullDay) {
+      if (!fullDayTemplate) {
+        setFormError('Dự án cần có mẫu Ca hành chính 08:00–17:30 và bật tính tăng ca để phân Full ca.');
+        return;
+      }
+      createFullDayAssignment.mutate({
+        projectId,
+        userId: Number(selectedUserId),
+        shiftTemplateId: fullDayTemplate.id,
+        workDate,
+        notes: notes.trim() || undefined,
+      }, {
+        onSuccess: () => {
+          setSelectedUserId('');
+          setSelectedTemplateId('');
+          setNotes('');
+        },
+        onError: (error) => {
+          setFormError(getApiErrorMessage(error, 'Không thể phân Full ca. Vui lòng kiểm tra lại dữ liệu.'));
+        },
+      });
+      return;
+    }
+
     createAssignment.mutate({
       projectId,
       userId: Number(selectedUserId),
@@ -79,8 +116,7 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
         setNotes('');
       },
       onError: (error) => {
-        const message = isAxiosError<{ message?: string }>(error) ? error.response?.data?.message : undefined;
-        setFormError(message || 'Không thể tạo phân ca. Vui lòng kiểm tra lại dữ liệu.');
+        setFormError(getApiErrorMessage(error, 'Không thể tạo phân ca. Vui lòng kiểm tra lại dữ liệu.'));
       },
     });
   };
@@ -94,8 +130,7 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
     }))) return;
     cancelAssignment.mutate(assignmentId, {
       onError: (error) => {
-        const message = isAxiosError<{ message?: string }>(error) ? error.response?.data?.message : undefined;
-        setFormError(message || 'Không thể hủy phân ca.');
+        setFormError(getApiErrorMessage(error, 'Không thể hủy phân ca.'));
       },
     });
   };
@@ -127,7 +162,8 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
           <span>Mẫu ca</span>
           <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} disabled={templatesLoading} className="h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]">
             <option value="">Chọn ca</option>
-            {(templates || []).map((template) => <option key={template.id} value={template.id}>{template.name} · {template.code} ({formatTime(template.startTime)}–{formatTime(template.endTime)}{template.crossesMidnight ? ' hôm sau' : ''})</option>)}
+            {isFullDayReady && <option value={FULL_DAY_VALUE}>Ca hành chính · Full ca (08:00–17:30 · 1 checkout)</option>}
+            {(templates || []).filter((template) => template.id !== fullDayTemplate?.id).map((template) => <option key={template.id} value={template.id}>{template.name} · {template.code} ({formatTime(template.startTime)}–{formatTime(template.endTime)}{template.crossesMidnight ? ' hôm sau' : ''})</option>)}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[var(--color-text-muted)]">
@@ -141,13 +177,14 @@ export function ShiftAssignmentPanel({ projectId }: ShiftAssignmentPanelProps) {
           <span>Ghi chú <span className="font-normal">(tùy chọn)</span></span>
           <input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ví dụ: Khu A, tầng 3" className="h-10 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-disabled)] focus:border-[var(--color-primary)]" />
         </label>
-        <Button onClick={submit} isLoading={createAssignment.isPending} className="h-10 whitespace-nowrap">
+        <Button onClick={submit} isLoading={createAssignment.isPending || createFullDayAssignment.isPending} className="h-10 whitespace-nowrap">
           <UserPlusIcon className="mr-2 size-4" />
           Phân ca
         </Button>
       </div>
 
       {selectedTemplate && <p className="border-b border-[var(--color-border)] px-5 py-3 text-xs text-[var(--color-text-muted)]">Ca này có thời gian nghỉ {selectedTemplate.breakMinutes} phút, cho phép chấm sớm {selectedTemplate.earlyCheckInMinutes} phút và chấm muộn tối đa {selectedTemplate.lateCheckInMinutes} phút. {overtimePolicyText(selectedTemplate)}</p>}
+      {isFullDay && <p className="border-b border-[var(--color-border)] bg-[var(--color-primary-light)]/40 px-5 py-3 text-xs font-medium text-[var(--color-text-secondary)]">Full ca là một lượt liên tục 08:00–17:30: chỉ cần một check-in và một checkout. Nghỉ 90 phút chỉ dùng khi tính công; tăng ca được xét sau 17:30 từ 60 đến tối đa 210 phút.</p>}
       {formError && <p className="border-b border-[var(--color-danger)]/20 bg-[var(--color-danger-bg)] px-5 py-3 text-sm font-semibold text-[var(--color-danger)]">{formError}</p>}
 
       <div className="overflow-x-auto">

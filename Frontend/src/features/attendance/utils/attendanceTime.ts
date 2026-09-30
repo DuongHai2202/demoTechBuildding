@@ -11,7 +11,7 @@ export function getLocalDateInputValue(date = new Date()): string {
 }
 
 export function getEffectiveAttendanceStatus(
-  attendance: Pick<Attendance, 'status' | 'checkOutAt' | 'scheduledEndAt'>,
+  attendance: Pick<Attendance, 'status' | 'checkOutAt' | 'scheduledEndAt' | 'overtimeEligible'>,
   now = new Date(),
 ): string {
   const hasMissingCheckout = !attendance.checkOutAt
@@ -19,7 +19,13 @@ export function getEffectiveAttendanceStatus(
     && !!attendance.scheduledEndAt;
   if (hasMissingCheckout) {
     const scheduledEnd = new Date(attendance.scheduledEndAt as string).getTime();
-    if (Number.isFinite(scheduledEnd) && now.getTime() > scheduledEnd) {
+    const scheduledEndDate = new Date(attendance.scheduledEndAt as string);
+    const overtimeCutoff = attendance.overtimeEligible === true
+      && scheduledEndDate.getHours() === 17
+      && scheduledEndDate.getMinutes() === 30
+      ? scheduledEnd + 210 * 60 * 1000
+      : scheduledEnd;
+    if (Number.isFinite(scheduledEnd) && now.getTime() > overtimeCutoff) {
       return 'ABSENT';
     }
   }
@@ -27,7 +33,7 @@ export function getEffectiveAttendanceStatus(
 }
 
 export function getMinutesForAttendance(
-  attendance: Pick<Attendance, 'workingMinutes' | 'checkInAt' | 'checkOutAt' | 'status' | 'scheduledEndAt'>,
+  attendance: Pick<Attendance, 'workingMinutes' | 'checkInAt' | 'checkOutAt' | 'status' | 'scheduledEndAt' | 'overtimeEligible'>,
   now = new Date(),
 ): number | null {
   const effectiveStatus = getEffectiveAttendanceStatus(attendance, now);

@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useProject, useProjectSlides, useCreateSlide, useDeleteSlide, useMyProjectPermission } from '../../features/projects/api/projectApi';
 import { toast } from 'sonner';
@@ -55,11 +55,12 @@ export default function ProjectDetailPage() {
   const { confirm } = useActionDialog();
   const { id } = useParams();
   const projectId = Number(id);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: project, isLoading } = useProject(projectId);
   const { data: slides } = useProjectSlides(projectId);
   const createSlide = useCreateSlide(projectId);
   const deleteSlide = useDeleteSlide(projectId);
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') === 'members' ? 3 : 0);
   const [showWorkLogForm, setShowWorkLogForm] = useState(false);
   const [showContractForm, setShowContractForm] = useState(false);
   const { data: contracts, isLoading: isLoadingContracts } = useProjectContracts(projectId);
@@ -73,6 +74,21 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     setSlidePage(1);
   }, [projectId, slides?.length]);
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'members') {
+      setActiveTab(3);
+    }
+  }, [searchParams]);
+
+  const selectTab = (index: number) => {
+    setActiveTab(index);
+    if (searchParams.has('tab')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('tab');
+      setSearchParams(nextParams, { replace: true });
+    }
+  };
 
   // Upload state
   const [uploading, setUploading] = useState(false);
@@ -273,7 +289,7 @@ export default function ProjectDetailPage() {
           {TABS.map((tab, idx) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(idx)}
+              onClick={() => selectTab(idx)}
               className={`px-6 pb-3 text-sm font-medium transition-colors border-b-2 ${idx === activeTab
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'

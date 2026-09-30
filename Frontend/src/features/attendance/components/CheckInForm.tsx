@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isAxiosError } from 'axios';
 import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowRightStartOnRectangleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { useProjects } from '../../projects/api/projectApi';
 import { useCheckIn, useCheckOut, useTodayRecord, useLogFailure, useCurrentShift } from '../api/attendanceApi';
@@ -13,6 +12,7 @@ import { FaceRegistrationModal } from '../../auth/components/FaceRegistrationMod
 import { calculateDistance } from '../../../utils/geo';
 import { useActionDialog } from '../../../components/ui/ActionDialog';
 import { getLocalDateInputValue } from '../utils/attendanceTime';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 export interface CheckInFormProps {
   selectedProjectId: number | '';
@@ -123,7 +123,9 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
     if (!selectedProjectId || !position) return;
     setActionError(null);
 
-    const isCheckingOutNow = !!todayRecord && !todayRecord.checkOutAt;
+    const isCheckingOutNow = !!todayRecord
+      && todayRecord.status !== 'ABSENT'
+      && !todayRecord.checkOutAt;
     if (!isCheckingOutNow && !isManager) {
       if (isShiftLoading) {
         setActionError('Đang tải thông tin ca làm việc. Vui lòng chờ một chút rồi thử lại.');
@@ -183,7 +185,9 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
       return;
     }
 
-    const isCheckingOut = !!todayRecord && !todayRecord.checkOutAt;
+    const isCheckingOut = !!todayRecord
+      && todayRecord.status !== 'ABSENT'
+      && !todayRecord.checkOutAt;
 
     if (isCheckingOut) {
       if (!(await confirm({
@@ -211,8 +215,7 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
         setActionError(null);
       },
       onError: (err: unknown) => {
-        const message = isAxiosError<{ message?: string }>(err) ? err.response?.data?.message : undefined;
-        setActionError(message || 'Có lỗi xảy ra khi chấm công.');
+        setActionError(getApiErrorMessage(err, 'Có lỗi xảy ra khi chấm công.'));
       }
     };
 
@@ -237,8 +240,17 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
     }
   };
 
-  const isCheckedIn = !!todayRecord && !todayRecord.checkOutAt;
-  const isCompleted = !!todayRecord && !!todayRecord.checkOutAt;
+  // An automatically-created ABSENT log can be reopened by an ADMIN/PM.
+  // In that case the next action is a new check-in, not a checkout and not a
+  // completed day. A manually closed absence remains blocking.
+  const isLateCheckInReopened = currentShift?.lateCheckInApproved === true
+    && currentShift.attendanceStatus === 'ABSENT';
+  const isCheckedIn = !!todayRecord && todayRecord.status !== 'ABSENT' && !todayRecord.checkOutAt;
+  const isAbsent = todayRecord?.status === 'ABSENT' && !isLateCheckInReopened;
+  const isCompleted = !!todayRecord && (
+    !!todayRecord.checkOutAt
+    || (todayRecord.status === 'ABSENT' && !isLateCheckInReopened)
+  );
 
   const handlePermissionResponse = (response: 'allow' | 'allow_once' | 'deny') => {
     const type = permissionRequest.type;
@@ -319,7 +331,17 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
         )}
       </div>
 
-      {isCompleted && (
+      {isAbsent && (
+        <div className="flex items-start gap-3 rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger-bg)] p-4 text-[var(--color-danger)]">
+          <ExclamationCircleIcon className="mt-0.5 size-6 shrink-0" />
+          <div>
+            <p className="text-sm font-bold">Ca làm việc đã được ghi nhận vắng</p>
+            <p className="mt-1 text-xs leading-relaxed">Bạn đã quá 30 phút kể từ giờ bắt đầu ca hoặc chưa checkout đúng quy định. Liên hệ quản trị viên nếu cần điều chỉnh.</p>
+          </div>
+        </div>
+      )}
+
+      {isCompleted && !isAbsent && (
         <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 flex items-center gap-3">
           <CheckCircleIcon className="size-6 shrink-0" />
           <p className="text-sm font-medium">Bạn đã hoàn thành ca làm việc hôm nay cho dự án này. Hẹn gặp lại vào ngày mai!</p>
@@ -344,7 +366,20 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
                       {currentShift.startTime.slice(0, 5)} – {currentShift.endTime.slice(0, 5)}{currentShift.crossesMidnight ? ' hôm sau' : ''}
                       {currentShift.breakMinutes > 0 ? ` · Nghỉ ${currentShift.breakMinutes} phút` : ''}
                     </p>
+                    {currentShift.attendanceStatus === 'ABSENT' && !currentShift.lateCheckInApproved && (
+                      <p className="mt-2 text-sm font-semibold text-[var(--color-danger)]">Đã phân ca · đã ghi nhận vắng</p>
+                    )}
+                    {currentShift.attendanceStatus === 'ABSENT' && currentShift.lateCheckInApproved && (
+                      <p className="mt-2 text-sm font-semibold text-[var(--color-info)]">Đã mở chấm công đặc thù · cần xác thực để bắt đầu</p>
+                    )}
+                    {currentShift.attendanceStatus === 'COMPLETED' && (
+                      <p className="mt-2 text-sm font-semibold text-[var(--color-success)]">Đã phân ca · đã hoàn thành</p>
+                    )}
                   </>
+                ) : todayRecord ? (
+                  <p className="mt-1 text-sm font-semibold text-[var(--color-danger)]">
+                    {isAbsent ? 'Đã phân ca nhưng đã ghi nhận vắng' : 'Đã có dữ liệu chấm công trong ngày này'}
+                  </p>
                 ) : (
                   <p className="mt-1 text-sm font-semibold text-[var(--color-warning)]">Chưa được phân ca cho ngày này</p>
                 )}

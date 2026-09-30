@@ -8,16 +8,7 @@ import { useRegister } from '../api/authApi';
 import { type RegisterFormData, registerSchema } from '../types/auth.schemas';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
-
-type ApiError = Error & {
-  response?: {
-    status?: number;
-    data?: {
-      message?: string;
-      errorCode?: string;
-    };
-  };
-};
+import { getApiErrorInfo } from '../../../services/apiError';
 
 export function RegisterForm() {
   const navigate = useNavigate();
@@ -56,16 +47,10 @@ export function RegisterForm() {
             },
           });
         },
-        onError: (err: ApiError) => {
-          const status = err.response?.status;
-          const message = err.response?.data?.message ||
-            (status === 409
-              ? 'Thông tin đăng ký đã tồn tại. Vui lòng kiểm tra lại tên đăng nhập, email hoặc số điện thoại.'
-              : status === 503
-                ? 'Dịch vụ xác thực đang tạm thời gián đoạn. Bạn chưa nhập sai thông tin; vui lòng thử lại sau.'
-                : 'Không thể hoàn tất đăng ký. Vui lòng kiểm tra lại thông tin hoặc thử lại sau.');
-          setSupportCode(err.response?.data?.errorCode ?? null);
-          setError('root', { type: 'manual', message });
+        onError: (err: unknown) => {
+          const info = getApiErrorInfo(err, 'Không thể hoàn tất đăng ký. Vui lòng kiểm tra lại thông tin hoặc thử lại sau.');
+          setSupportCode(info.supportCode ?? null);
+          setError('root', { type: 'manual', message: info.message });
         },
       });
     },
@@ -121,7 +106,7 @@ export function RegisterForm() {
           <p>{errors.root.message}</p>
           {supportCode && (
             <p className="mt-1 text-xs opacity-75">
-              Mã tham chiếu hỗ trợ: {supportCode}. Chỉ cung cấp mã này khi liên hệ quản trị viên.
+              Mã hỗ trợ: {supportCode}. Chỉ cung cấp mã này khi liên hệ quản trị viên.
             </p>
           )}
         </div>

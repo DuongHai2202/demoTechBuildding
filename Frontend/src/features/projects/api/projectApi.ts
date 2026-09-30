@@ -9,6 +9,7 @@ import { useAuthStore } from '../../auth/stores/authStore';
 export interface ProjectPermissions {
   canEditProject: boolean;
   canManageMembers: boolean;
+  canManageShifts: boolean;
   canManageSchedule: boolean;
   canManageZones: boolean;
   canCreateWorkLog: boolean;
@@ -308,6 +309,7 @@ export function useMyProjectPermission(projectId: number): ProjectPermissions {
   return {
     canEditProject: isAdmin || isGlobalPM,
     canManageMembers: isAdmin || isProjectPM,
+    canManageShifts: isAdmin || isGlobalPM || isProjectPM,
     canManageSchedule: isAdmin || isGlobalPM || isProjectPM || isSupervisor || isEngineer,
     canManageZones: isAdmin || isGlobalPM || isProjectPM || isSupervisor || isEngineer,
     canCreateWorkLog: isAdmin || isEngineer || isSupervisor || isProjectPM,

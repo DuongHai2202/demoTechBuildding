@@ -146,7 +146,7 @@ public class AuthServiceImpl implements AuthService {
         log.info("Verifying OTP for user: {}", username);
 
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found: " + username));
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy yêu cầu xác thực. Vui lòng đăng ký lại."));
 
         // Allow OTP verification even if already active to support auto-activation flow
         // The OTP is still verified below for security, and tokens are returned.
@@ -154,7 +154,7 @@ public class AuthServiceImpl implements AuthService {
         // Verify OTP
         boolean isValid = otpService.verifyOtp(user.getId(), otpCode, "REGISTER");
         if (!isValid) {
-            throw new RuntimeException("Invalid or expired OTP code");
+            throw new BadRequestException("Mã OTP không đúng hoặc đã hết hạn. Vui lòng kiểm tra email và nhập lại mã mới.");
         }
 
         if (PROTECTED_ADMIN_USERNAME.equalsIgnoreCase(user.getUsername())) {
@@ -184,13 +184,13 @@ public class AuthServiceImpl implements AuthService {
 
         // Check if account is activated
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found: " + request.getUsername()));
+                .orElseThrow(() -> new UnauthorizedException("Tên đăng nhập hoặc mật khẩu không chính xác."));
 
         if (user.getStatus() == UserStatus.PENDING) {
-            throw new RuntimeException("Account is not activated. Please verify your OTP first.");
+            throw new UnauthorizedException("Tài khoản chưa được kích hoạt. Vui lòng xác thực OTP trước khi đăng nhập.");
         }
         if (user.isDeleted() || user.getStatus() != UserStatus.ACTIVE) {
-            throw new RuntimeException("Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.");
+            throw new UnauthorizedException("Tài khoản đang bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.");
         }
 
         // Authenticate using Spring Security's AuthenticationManager

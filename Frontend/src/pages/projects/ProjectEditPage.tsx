@@ -6,6 +6,7 @@ import type { ProjectFormData } from '../../features/projects/types/project.sche
 import { LoadingSkeleton } from '../../components/LoadingSkeleton';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
+import { getApiErrorMessage } from '../../services/apiError';
 
 export default function ProjectEditPage() {
   const { id } = useParams();
@@ -34,9 +35,8 @@ export default function ProjectEditPage() {
         toast.success('Dự án đã được cập nhật thành công!');
         navigate(`/projects/${projectId}`);
       },
-      onError: (error: any) => {
-        const message = error?.response?.data?.message || 'Có lỗi xảy ra khi cập nhật dự án';
-        toast.error(message);
+      onError: (error: unknown) => {
+        toast.error(getApiErrorMessage(error, 'Có lỗi xảy ra khi cập nhật dự án.'));
       }
     });
   };

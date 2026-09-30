@@ -32,6 +32,11 @@ public class ShiftAssignmentResponseDTO implements Serializable {
     private LocalDateTime scheduledEndAt;
     private String status;
     private String notes;
+    private boolean lateCheckInApproved;
+    private LocalDateTime lateCheckInApprovedAt;
+    private String lateCheckInApprovalNote;
+    private boolean attendanceClaimed;
+    private String attendanceStatus;
     private boolean current;
     private boolean eligibleForCheckIn;
     private String windowMessage;

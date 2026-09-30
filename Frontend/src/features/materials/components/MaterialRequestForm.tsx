@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from '../../auth/stores/authStore';
 import type { MaterialRequest } from '../types/material.types';
 import { optionalText } from '../../../utils/validation';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 const schema = z.object({
   materialId: z.coerce.number().finite().min(1, 'Vui lòng chọn vật tư'),
@@ -86,9 +87,8 @@ export function MaterialRequestForm({ projectId, onClose, initialData }: Materia
       }
       toast.success(isEdit ? 'Đã cập nhật yêu cầu vật tư.' : 'Đã tạo yêu cầu vật tư.');
       onClose();
-    } catch (error: any) {
-      console.error('Lỗi khi lưu yêu cầu:', error);
-      toast.error(error?.response?.data?.message || 'Không thể lưu yêu cầu vật tư.');
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'Không thể lưu yêu cầu vật tư.'));
     }
   };
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { isAxiosError } from 'axios';
 import { useProjectHistory, exportAttendanceExcel, useReviewOvertime } from '../api/attendanceApi';
 import {
   CalendarIcon,
@@ -14,6 +13,7 @@ import { Button } from '../../../components/ui/Button';
 import { Pagination } from '../../../components/ui/Pagination';
 import { formatDuration, getEffectiveAttendanceStatus, getLocalDateInputValue, getMinutesForAttendance } from '../utils/attendanceTime';
 import type { Attendance } from '../types/attendance.types';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 const PAGE_SIZE = 10;
 type StatusFilter = 'ALL' | 'REVIEW' | 'CHECKED_IN' | 'COMPLETED' | 'ABSENT' | 'FAILED';
@@ -61,7 +61,7 @@ function getStatusMeta(status: string) {
     case 'MISSING_CHECKOUT':
       return { label: 'Thiếu checkout · chờ xử lý', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'ABSENT':
-      return { label: 'Vắng · thiếu checkout', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
+      return { label: 'Vắng ca', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
     case 'PENDING_REVIEW':
       return { label: 'Chờ kiểm tra', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     default:
@@ -198,8 +198,7 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
       {
         onSuccess: () => setSelectedLog(null),
         onError: (error) => {
-          const message = isAxiosError<{ message?: string }>(error) ? error.response?.data?.message : undefined;
-          setReviewError(message || 'Không thể cập nhật duyệt tăng ca. Vui lòng thử lại.');
+          setReviewError(getApiErrorMessage(error, 'Không thể cập nhật duyệt tăng ca. Vui lòng thử lại.'));
         },
       },
     );
@@ -300,7 +299,7 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
                 return (
                   <tr key={log.id} className="transition-colors hover:bg-[var(--color-surface-alt)]/40">
                     <td className="px-4 py-3"><div className="flex items-center gap-2.5"><div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-sm font-bold text-[var(--color-primary)]">{(log.fullName || log.username || '?').charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate font-semibold text-[var(--color-text-primary)]">{log.fullName || log.username || 'Chưa xác định'}</p><p className="truncate text-xs text-[var(--color-text-muted)]">@{log.username || '—'}</p></div></div></td>
-                    <td className="px-4 py-3"><p className="font-semibold text-[var(--color-text-primary)]">{formatTime(log.checkInAt)} <span className="mx-1 text-[var(--color-text-disabled)]">→</span> {log.status === 'FAILED' ? '—' : formatTime(log.checkOutAt)}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">{formatDateTime(log.checkInAt).split(',')[0]}</p></td>
+                    <td className="px-4 py-3"><p className="font-semibold text-[var(--color-text-primary)]">{formatTime(log.checkInAt)} <span className="mx-1 text-[var(--color-text-disabled)]">→</span> {log.status === 'FAILED' ? '—' : formatTime(log.checkOutAt)}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">{formatDateTime(log.checkInAt).split(',')[0]}</p>{(log.lateMinutes ?? 0) > 0 && displayStatus !== 'ABSENT' && <p className="mt-1 text-xs font-semibold text-[var(--color-warning)]">Muộn {log.lateMinutes} phút · tính công</p>}</td>
                     <td className="px-4 py-3"><p className={`font-semibold ${isLive ? 'text-[var(--color-info)]' : 'text-[var(--color-text-primary)]'}`}>{isLive ? 'Đang làm · ' : ''}{log.status === 'FAILED' ? 'Không tính' : formatDuration(minutes)}</p>{minutes != null && <p className="mt-1 text-xs text-[var(--color-text-muted)]">{minutes} phút</p>}</td>
                     <td className="px-4 py-3"><p className="font-semibold text-[var(--color-text-primary)]">{(log.overtimeMinutes ?? 0) > 0 ? `${log.overtimeMinutes} phút` : '—'}</p>{(log.overtimeMinutes ?? 0) > 0 && <p className={`mt-1 text-xs font-medium ${log.overtimeStatus === 'PENDING' ? 'text-[var(--color-warning)]' : log.overtimeStatus === 'APPROVED' ? 'text-[var(--color-success)]' : 'text-[var(--color-text-muted)]'}`}>{overtimeStatusLabel(log.overtimeStatus)}{log.overtimeStatus === 'APPROVED' ? ` · ${log.overtimeApprovedMinutes ?? 0} phút` : ''}</p>}</td>
                     <td className="px-4 py-3"><StatusText status={displayStatus} /></td>
@@ -323,7 +322,7 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
           <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-[var(--color-surface)] shadow-2xl">
              <div className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] px-5 py-4"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-primary)]">Chi tiết lượt chấm công</p><h2 id="attendance-detail-title" className="mt-1 truncate text-lg font-bold text-[var(--color-text-primary)]">{selectedLog.fullName || selectedLog.username || 'Không xác định'}</h2><div className="mt-2"><StatusText status={getEffectiveAttendanceStatus(selectedLog)} /></div></div><button type="button" onClick={() => setSelectedLog(null)} className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)]" aria-label="Đóng"><XMarkIcon className="size-5" /></button></div>
              <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
-               <section><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Thời gian làm việc</h3><dl className="grid gap-3 sm:grid-cols-2"><DetailField label="Bắt đầu" value={formatDateTime(selectedLog.checkInAt)} /><DetailField label="Kết thúc" value={getEffectiveAttendanceStatus(selectedLog) === 'FAILED' ? 'Không áp dụng' : formatDateTime(selectedLog.checkOutAt)} /><DetailField label="Tổng thời lượng" value={getEffectiveAttendanceStatus(selectedLog) === 'FAILED' ? 'Không tính' : formatDuration(getMinutesForAttendance(selectedLog, new Date()))} /><DetailField label="Tổng số phút" value={getMinutesForAttendance(selectedLog, new Date()) != null ? `${getMinutesForAttendance(selectedLog, new Date())} phút` : '—'} /></dl></section>
+              <section><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Thời gian làm việc</h3><dl className="grid gap-3 sm:grid-cols-2"><DetailField label="Bắt đầu" value={formatDateTime(selectedLog.checkInAt)} /><DetailField label="Kết thúc" value={getEffectiveAttendanceStatus(selectedLog) === 'FAILED' ? 'Không áp dụng' : formatDateTime(selectedLog.checkOutAt)} /><DetailField label="Đi muộn" value={(selectedLog.lateMinutes ?? 0) > 0 ? `${selectedLog.lateMinutes} phút · vẫn tính công` : 'Không'} /><DetailField label="Tổng thời lượng" value={getEffectiveAttendanceStatus(selectedLog) === 'FAILED' ? 'Không tính' : formatDuration(getMinutesForAttendance(selectedLog, new Date()))} /><DetailField label="Tổng số phút" value={getMinutesForAttendance(selectedLog, new Date()) != null ? `${getMinutesForAttendance(selectedLog, new Date())} phút` : '—'} /></dl></section>
               <section className="border-t border-[var(--color-border)] pt-5"><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Tăng ca</h3><dl className="grid gap-3 sm:grid-cols-2"><DetailField label="Phút hệ thống tính" value={(selectedLog.overtimeMinutes ?? 0) > 0 ? `${selectedLog.overtimeMinutes} phút` : 'Không có'} /><DetailField label="Phút được duyệt" value={selectedLog.overtimeApprovedMinutes != null ? `${selectedLog.overtimeApprovedMinutes} phút` : 'Chưa xử lý'} /><DetailField label="Trạng thái" value={overtimeStatusLabel(selectedLog.overtimeStatus)} /><DetailField label="Người duyệt" value={selectedLog.overtimeReviewedBy || '—'} /></dl>
                 {selectedLog.overtimeStatus === 'PENDING' && (
                   <div className="mt-4 rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/5 p-4">

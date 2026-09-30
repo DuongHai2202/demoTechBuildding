@@ -2,12 +2,14 @@ package com.techbuildding.demoTechBuildding.mapper;
 
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.AttendanceLog;
+import com.techbuildding.demoTechBuildding.entity.ShiftTemplate;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -25,6 +27,7 @@ public interface AttendanceMapper {
     @Mapping(target = "shiftAssignmentId", source = "shiftAssignment.id")
     @Mapping(target = "shiftCode", source = "shiftAssignment.shiftTemplate.code")
     @Mapping(target = "shiftName", source = "shiftAssignment.shiftTemplate.name")
+    @Mapping(target = "overtimeEligible", source = "shiftAssignment.shiftTemplate.overtimeEligible")
     @Mapping(target = "status", expression = "java(resolveStatus(log))")
     @Mapping(target = "workingHours", expression = "java(calcHours(log))")
     @Mapping(target = "workingMinutes", expression = "java(calcMinutes(log))")
@@ -78,10 +81,11 @@ public interface AttendanceMapper {
     }
 
     /**
-     * A planned shift that was not checked out by its scheduled end is an
-     * absence, not a live session. Keep this rule in the response mapping as
-     * a safety net for legacy rows that have not yet been auto-finalized by the
-     * service read path.
+     * A planned shift that was not checked out by its checkout cutoff is an
+     * absence, not a live session. Administrative overtime shifts have a
+     * checkout window through 21:00; other shifts use their scheduled end.
+     * Keep this rule in the response mapping as a safety net for legacy rows
+     * that have not yet been auto-finalized by the service read path.
      */
     default Long calcMinutes(AttendanceLog log) {
         if (log == null) {
@@ -126,8 +130,8 @@ public interface AttendanceMapper {
         if ("CHECKED_IN".equals(log.getStatus())
                 && log.getCheckOutAt() == null
                 && log.getCheckInAt() != null
-                && log.getScheduledEndAt() != null
-                && LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).isAfter(log.getScheduledEndAt())) {
+                && checkoutCutoffAt(log) != null
+                && LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).isAfter(checkoutCutoffAt(log))) {
             return "ABSENT";
         }
         if ("CHECKED_IN".equals(log.getStatus())
@@ -137,5 +141,24 @@ public interface AttendanceMapper {
             return "MISSING_CHECKOUT";
         }
         return log.getStatus();
+    }
+
+    default LocalDateTime checkoutCutoffAt(AttendanceLog log) {
+        if (log == null) {
+            return null;
+        }
+        LocalDateTime scheduledEnd = log.getScheduledEndAt();
+        if (scheduledEnd == null || log.getShiftAssignment() == null
+                || log.getShiftAssignment().getShiftTemplate() == null) {
+            return scheduledEnd;
+        }
+
+        ShiftTemplate template = log.getShiftAssignment().getShiftTemplate();
+        boolean administrativeOvertime = template.isOvertimeEligible()
+                && !template.isCrossesMidnight()
+                && LocalTime.of(17, 30).equals(template.getEndTime())
+                && (LocalTime.of(8, 0).equals(template.getStartTime())
+                || LocalTime.of(13, 0).equals(template.getStartTime()));
+        return administrativeOvertime ? scheduledEnd.plusMinutes(210) : scheduledEnd;
     }
 }

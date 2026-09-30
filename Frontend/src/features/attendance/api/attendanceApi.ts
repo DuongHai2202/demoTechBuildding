@@ -2,7 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
 import type { Attendance, CheckInRequest, CheckOutRequest, OvertimeReviewRequest } from '../types/attendance.types';
-import type { ShiftAssignment, ShiftAssignmentRequest, ShiftTemplate, ShiftTemplateRequest } from '../types/shift.types';
+import type {
+  FullDayShiftAssignmentRequest,
+  ShiftAssignment,
+  ShiftAssignmentRequest,
+  ShiftTemplate,
+  ShiftTemplateRequest,
+} from '../types/shift.types';
 
 const ATTENDANCE_KEY = ['attendance'] as const;
 
@@ -100,6 +106,7 @@ export function useAllAttendance(startDate: string, endDate: string, options?: {
 
 // GET /api/v1/attendance/today
 export function useTodayRecord(userId: number, projectId: number, date: string, options?: { enabled?: boolean }) {
+  const enabled = !!userId && !!projectId && (options?.enabled ?? true);
   return useQuery({
     queryKey: [...ATTENDANCE_KEY, 'today', userId, projectId, date],
     queryFn: async () => {
@@ -108,7 +115,11 @@ export function useTodayRecord(userId: number, projectId: number, date: string, 
       });
       return data?.data ?? null;
     },
-    enabled: !!userId && !!projectId && (options?.enabled ?? true),
+    enabled,
+    refetchInterval: enabled ? 5_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -162,6 +173,7 @@ const SHIFT_KEY = [...ATTENDANCE_KEY, 'shifts'] as const;
 
 // GET /api/v1/shifts/assignments/current
 export function useCurrentShift(userId: number, projectId: number, date: string, options?: { enabled?: boolean }) {
+  const enabled = !!userId && !!projectId && (options?.enabled ?? true);
   return useQuery({
     queryKey: [...SHIFT_KEY, 'current', userId, projectId, date],
     queryFn: async () => {
@@ -170,7 +182,13 @@ export function useCurrentShift(userId: number, projectId: number, date: string,
       });
       return data?.data ?? null;
     },
-    enabled: !!userId && !!projectId && (options?.enabled ?? true),
+    enabled,
+    // A manager can assign a shift from another browser. Poll only while the
+    // attendance screen is active so the employee does not need to refresh.
+    refetchInterval: enabled ? 5_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -206,6 +224,54 @@ export function useCreateShiftAssignment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+      // The current attendance query may still contain the automatic ABSENT
+      // snapshot. Refresh it so the employee can start a newly approved late
+      // check-in immediately without a manual page reload.
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
+
+export function useCreateFullDayShiftAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: FullDayShiftAssignmentRequest) => {
+      const { data } = await api.post<ApiResponse<ShiftAssignment>>('/shifts/assignments/full-day', payload);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
+
+export function useApproveLateCheckIn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ assignmentId, reason }: { assignmentId: number; reason: string }) => {
+      const { data } = await api.post<ApiResponse<ShiftAssignment>>(
+        `/shifts/assignments/${assignmentId}/late-checkin`,
+        { reason },
+      );
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
+
+export function useRevokeLateCheckIn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (assignmentId: number) => {
+      await api.delete(`/shifts/assignments/${assignmentId}/late-checkin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHIFT_KEY });
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
     },
   });
 }

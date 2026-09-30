@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /** A concrete shift assigned to one user for one project and work date. */
 @Getter
@@ -50,4 +51,17 @@ public class ShiftAssignment extends AbstractEntity<Long> {
 
     @Column(name = "notes", length = 500)
     private String notes;
+
+    @Builder.Default
+    @Column(name = "late_checkin_approved", nullable = false)
+    private boolean lateCheckInApproved = false;
+
+    @Column(name = "late_checkin_approved_by")
+    private Long lateCheckInApprovedBy;
+
+    @Column(name = "late_checkin_approved_at")
+    private LocalDateTime lateCheckInApprovedAt;
+
+    @Column(name = "late_checkin_approval_note", length = 500)
+    private String lateCheckInApprovalNote;
 }

@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { useActionDialog } from '../../../components/ui/ActionDialog';
 import { Pagination } from '../../../components/ui/Pagination';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 interface RevitFileManagerProps {
   projectId: number;
@@ -76,9 +77,8 @@ export function RevitFileManager({ projectId, zoneId }: RevitFileManagerProps) {
       setUploadProgress(100);
       toast.success('Tải lên file Revit thành công!');
       refetch();
-    } catch (error: any) {
-      console.error('Upload failed:', error);
-      toast.error(error?.response?.data?.message || 'Lỗi khi tải file lên');
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, 'Lỗi khi tải file lên. Vui lòng thử lại.'));
     } finally {
       setIsUploading(false);
       setUploadProgress(0);

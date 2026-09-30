@@ -1,6 +1,8 @@
 package com.techbuildding.demoTechBuildding.controller;
 
 import com.techbuildding.demoTechBuildding.dto.request.shift.ShiftAssignmentRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.shift.FullDayShiftAssignmentRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.shift.LateCheckInApprovalRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.shift.ShiftTemplateRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
 import com.techbuildding.demoTechBuildding.dto.response.shift.ShiftAssignmentResponseDTO;
@@ -79,6 +81,34 @@ public class ShiftController {
     public ResponseData<ShiftAssignmentResponseDTO> createAssignment(
             @Valid @RequestBody ShiftAssignmentRequestDTO request) {
         return new ResponseData<>(HttpStatus.CREATED.value(), "Phân ca thành công", shiftService.createAssignment(request));
+    }
+
+    @Operation(summary = "Assign one full administrative day from 08:00 to 17:30")
+    @PostMapping("/assignments/full-day")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PM')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseData<ShiftAssignmentResponseDTO> createFullDayAssignment(
+            @Valid @RequestBody FullDayShiftAssignmentRequestDTO request) {
+        return new ResponseData<>(HttpStatus.CREATED.value(),
+                "Đã phân Full ca 08:00–17:30", shiftService.createFullDayAssignment(request));
+    }
+
+    @Operation(summary = "Approve a late check-in for one assignment")
+    @PostMapping("/assignments/{assignmentId}/late-checkin")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PM')")
+    public ResponseData<ShiftAssignmentResponseDTO> approveLateCheckIn(
+            @PathVariable Long assignmentId,
+            @Valid @RequestBody LateCheckInApprovalRequestDTO request) {
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã mở chấm công đặc thù",
+                shiftService.approveLateCheckIn(assignmentId, request.getReason()));
+    }
+
+    @Operation(summary = "Revoke a late check-in approval")
+    @DeleteMapping("/assignments/{assignmentId}/late-checkin")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PM')")
+    public ResponseData<Void> revokeLateCheckIn(@PathVariable Long assignmentId) {
+        shiftService.revokeLateCheckIn(assignmentId);
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã thu hồi quyền chấm công muộn");
     }
 
     @Operation(summary = "Cancel an assignment without deleting its audit trail")

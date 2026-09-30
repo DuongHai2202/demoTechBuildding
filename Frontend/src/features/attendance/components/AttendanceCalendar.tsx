@@ -37,7 +37,7 @@ function statusMeta(status: string) {
     case 'MISSING_CHECKOUT':
       return { label: 'Thiếu checkout · chờ xử lý', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'ABSENT':
-      return { label: 'Vắng · thiếu checkout', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
+      return { label: 'Vắng ca', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
     case 'PENDING_REVIEW':
       return { label: 'Chờ kiểm tra', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'FAILED':
@@ -245,6 +245,7 @@ export function AttendanceCalendar({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-[var(--color-text-primary)]">{log.fullName || log.username || 'Không xác định'}</p>
                     <p className="mt-1 truncate text-xs text-[var(--color-text-muted)]">{log.projectName || 'Không gắn dự án'}</p>
+                    {(log.lateMinutes ?? 0) > 0 && displayStatus !== 'ABSENT' && <p className="mt-1 text-xs font-semibold text-[var(--color-warning)]">Đi muộn {log.lateMinutes} phút · vẫn tính công</p>}
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-[var(--color-text-primary)]">{duration}</p>

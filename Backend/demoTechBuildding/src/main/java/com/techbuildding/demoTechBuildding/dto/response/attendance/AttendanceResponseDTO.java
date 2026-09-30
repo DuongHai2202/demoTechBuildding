@@ -29,6 +29,7 @@ public class AttendanceResponseDTO implements Serializable {
     private Long shiftAssignmentId;
     private String shiftCode;
     private String shiftName;
+    private Boolean overtimeEligible;
     private LocalDateTime scheduledStartAt;
     private LocalDateTime scheduledEndAt;
     private Integer breakMinutes;

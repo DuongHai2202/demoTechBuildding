@@ -38,7 +38,7 @@ function statusMeta(status: string) {
     case 'MISSING_CHECKOUT':
       return { label: 'Thiếu checkout · chờ xử lý', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'ABSENT':
-      return { label: 'Vắng · thiếu checkout', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
+      return { label: 'Vắng ca', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
     case 'PENDING_REVIEW':
       return { label: 'Chờ kiểm tra', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'FAILED':
@@ -151,6 +151,7 @@ export function AttendanceHistory() {
         <div className="min-w-44 space-y-1">
           <p className="font-semibold text-[var(--color-text-primary)]">Vào: {formatDateTime(log.checkInAt)}</p>
           <p className="text-xs text-[var(--color-text-muted)]">Ra: {log.status === 'FAILED' ? 'Không áp dụng' : formatDateTime(log.checkOutAt)}</p>
+          {(log.lateMinutes ?? 0) > 0 && log.status !== 'ABSENT' && <p className="text-xs font-semibold text-[var(--color-warning)]">Đi muộn {log.lateMinutes} phút · vẫn tính công</p>}
         </div>
       ),
     },

@@ -5,6 +5,7 @@ import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutReques
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.shift.ShiftAssignmentResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.AttendanceLog;
 import com.techbuildding.demoTechBuildding.entity.Project;
 import com.techbuildding.demoTechBuildding.entity.ShiftAssignment;
@@ -69,7 +70,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED", "ABSENT");
     private static final String ABSENT_STATUS = "ABSENT";
     private static final String AUTO_ABSENCE_REMARK =
-            "Tự động chốt vắng: đã quá giờ kết thúc ca nhưng chưa checkout.";
+            "Tự động chốt vắng: đã quá hạn checkout của ca/tăng ca nhưng chưa checkout.";
+    private static final String LATE_CHECKIN_APPROVED_REMARK =
+            "Chấm công muộn được quản lý cho phép theo phân ca.";
     private static final String OVERTIME_NONE = "NONE";
     private static final String OVERTIME_PENDING = "PENDING";
     private static final String OVERTIME_APPROVED = "APPROVED";
@@ -93,10 +96,24 @@ public class AttendanceServiceImpl implements AttendanceService {
         validateProjectMembership(userId, request.getProjectId());
 
         LocalDateTime checkInAt = now();
+        boolean manager = isManager();
+        Optional<ShiftAssignment> applicableShiftBeforeFinalization = manager
+                ? Optional.empty()
+                : shiftService.findApplicableAssignment(userId, request.getProjectId(), checkInAt);
+        Optional<ShiftAssignment> lateShiftBeforeFinalization = manager
+                ? Optional.empty()
+                : shiftService.findLateCheckInAssignment(userId, request.getProjectId(), checkInAt);
         // Close abandoned planned shifts before checking for an active session.
         // This lets the next valid shift proceed while preserving the original
         // check-in record for audit and reporting.
         finalizeOverdueOpenLogs(checkInAt);
+        if (!manager && applicableShiftBeforeFinalization.isEmpty() && lateShiftBeforeFinalization.isPresent()) {
+            ShiftAssignment lateShift = lateShiftBeforeFinalization.get();
+            throw new BadRequestException(
+                    "Bạn đã muộn quá " + shiftService.allowedLateCheckInMinutes(lateShift)
+                            + " phút so với ca " + lateShift.getShiftTemplate().getName()
+                            + ". Hệ thống đã ghi nhận Vắng cho buổi này.");
+        }
         // Staff must have a concrete assignment for the current project/date.
         // ADMIN/PM can perform an operational override, but the record will
         // remain visibly unscheduled instead of pretending to be a planned ca.
@@ -123,7 +140,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         // A split workday can have more than one completed session. Prevent
         // reusing the same assignment while allowing a later assignment (for
         // example, morning followed by afternoon) to be checked in normally.
-        if (shiftAssignment != null && attendanceLogRepository.existsByShiftAssignmentAndStatusIn(
+        if (shiftAssignment != null
+                && !shiftAssignment.isLateCheckInApproved()
+                && attendanceLogRepository.existsByShiftAssignmentAndStatusIn(
                 shiftAssignment.getId(), COMPLETED_STATUSES)) {
             throw new BadRequestException("Ca này đã được chấm công hoàn tất, không thể chấm lại.");
         }
@@ -157,6 +176,12 @@ public class AttendanceServiceImpl implements AttendanceService {
             attendanceLog.setLateMinutes(shiftService.lateMinutes(shiftAssignment, checkInAt));
             attendanceLog.setEarlyLeaveMinutes(0L);
             attendanceLog.setOvertimeMinutes(0L);
+            if (shiftAssignment.isLateCheckInApproved()) {
+                attendanceLog.setRemarks(shiftAssignment.getLateCheckInApprovalNote() == null
+                        ? LATE_CHECKIN_APPROVED_REMARK
+                        : LATE_CHECKIN_APPROVED_REMARK + " Lý do: "
+                        + shiftAssignment.getLateCheckInApprovalNote());
+            }
         }
 
         AttendanceLog saved = attendanceLogRepository.save(attendanceLog);
@@ -184,11 +209,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (activeBeforeFinalization.isPresent()) {
             AttendanceLog overdueLog = activeBeforeFinalization.get();
             backfillLegacySchedule(overdueLog);
-            if (isPastScheduledEnd(overdueLog, checkOutAt)) {
+            if (isPastCheckoutCutoff(overdueLog, checkOutAt)) {
                 markAsAbsent(overdueLog);
                 attendanceLogRepository.save(overdueLog);
                 throw new BadRequestException(
-                        "Ca đã quá giờ kết thúc nhưng chưa checkout. Hệ thống đã chốt lượt này là Vắng do thiếu checkout; vui lòng liên hệ quản trị viên nếu cần điều chỉnh.");
+                        "Ca đã quá hạn checkout. Hệ thống đã chốt lượt này là Vắng do thiếu checkout; vui lòng liên hệ quản trị viên nếu cần điều chỉnh.");
             }
         }
         finalizeOverdueOpenLogs(checkOutAt);
@@ -362,7 +387,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         // null so the UI can start that next shift instead of treating the
         // completed morning shift as the end of the whole workday.
         LocalDate businessDate = businessDate();
-        if (shiftService.getCurrentAssignment(userId, projectId, businessDate) != null) {
+        ShiftAssignmentResponseDTO currentAssignment =
+                shiftService.getCurrentAssignment(userId, projectId, businessDate);
+        if (currentAssignment != null && !currentAssignment.isAttendanceClaimed()) {
             return null;
         }
 
@@ -372,8 +399,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDateTime startOfDay = businessDate.atStartOfDay();
         LocalDateTime endOfDay = businessDate.atTime(LocalTime.MAX);
         return attendanceLogRepository
-                .findByUserIdAndProjectIdAndStatusAndCheckInAtBetweenOrderByCheckInAtDesc(
-                        userId, projectId, "COMPLETED", startOfDay, endOfDay)
+                .findByUserIdAndProjectIdAndStatusInAndCheckInAtBetweenOrderByCheckInAtDesc(
+                        userId, projectId, COMPLETED_STATUSES, startOfDay, endOfDay)
                 .stream()
                 .findFirst()
                 .map(attendanceMapper::toResponseDTO)
@@ -517,6 +544,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * the remarks explain why it was closed.
      */
     private void finalizeOverdueOpenLogs(LocalDateTime referenceTime) {
+        shiftService.finalizeMissedAssignments(referenceTime);
         List<AttendanceLog> openLogs = attendanceLogRepository.findOpenAttendanceLogs("CHECKED_IN");
         if (openLogs.isEmpty()) {
             return;
@@ -525,7 +553,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<AttendanceLog> changedLogs = new ArrayList<>();
         for (AttendanceLog openLog : openLogs) {
             boolean scheduleBackfilled = backfillLegacySchedule(openLog);
-            if (isPastScheduledEnd(openLog, referenceTime)) {
+            if (isPastCheckoutCutoff(openLog, referenceTime)) {
                 markAsAbsent(openLog);
                 changedLogs.add(openLog);
             } else if (scheduleBackfilled) {
@@ -544,11 +572,21 @@ public class AttendanceServiceImpl implements AttendanceService {
                 absentCount, referenceTime);
     }
 
-    private boolean isPastScheduledEnd(AttendanceLog attendanceLog, LocalDateTime referenceTime) {
+    private boolean isPastCheckoutCutoff(AttendanceLog attendanceLog, LocalDateTime referenceTime) {
         return attendanceLog != null
                 && attendanceLog.getCheckOutAt() == null
-                && attendanceLog.getScheduledEndAt() != null
-                && referenceTime.isAfter(attendanceLog.getScheduledEndAt());
+                && checkoutCutoffAt(attendanceLog) != null
+                && referenceTime.isAfter(checkoutCutoffAt(attendanceLog));
+    }
+
+    private LocalDateTime checkoutCutoffAt(AttendanceLog attendanceLog) {
+        if (attendanceLog == null) {
+            return null;
+        }
+        if (attendanceLog.getShiftAssignment() != null) {
+            return shiftService.missedCheckoutCutoffAt(attendanceLog.getShiftAssignment());
+        }
+        return attendanceLog.getScheduledEndAt();
     }
 
     private void markAsAbsent(AttendanceLog attendanceLog) {
@@ -630,10 +668,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     /**
      * Overtime is only valid after a complete administrative workday. The
-     * normal schedule is represented by two assignments (08:00-12:00 and
-     * 13:00-17:30), while a legacy full-day assignment (08:00-17:30) is also
-     * accepted for historical data. A night shift or a single half-day can
-     * never create an overtime request.
+     * the normal schedule is one continuous assignment (08:00-17:30). The
+     * old split pair (08:00-12:00 and 13:00-17:30) is accepted only for
+     * historical records. A night shift or a single half-day can never create
+     * an overtime request.
      */
     private boolean qualifiesForAdministrativeOvertime(AttendanceLog currentLog, LocalDateTime actualCheckOut) {
         ShiftAssignment currentAssignment = currentLog.getShiftAssignment();
@@ -679,7 +717,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             scheduledEnd = shiftService.scheduledEndAt(log.getShiftAssignment());
         }
         return scheduledStart != null && scheduledEnd != null
-                && !log.getCheckInAt().isAfter(scheduledStart)
+                && !shiftService.isLateBeyondCheckInLimit(log.getShiftAssignment(), log.getCheckInAt())
                 && !actualCheckOut.isBefore(scheduledEnd);
     }
 

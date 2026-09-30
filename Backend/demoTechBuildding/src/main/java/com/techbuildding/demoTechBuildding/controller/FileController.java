@@ -127,6 +127,59 @@ public class FileController {
     }
 
     /**
+     * GET /api/v1/files/preview - Stream an image/document inline through the API.
+     *
+     * Stored URLs historically point directly to MinIO (often localhost:9090).
+     * Browsers cannot reliably reach that address in another environment and an
+     * <img> element cannot attach the JWT used by this application. This endpoint
+     * keeps the object private and lets the authenticated API stream it instead.
+     */
+    @Operation(summary = "Preview a stored file", description = "Streams a previously uploaded file inline through the authenticated API.")
+    @GetMapping("/preview")
+    public ResponseEntity<byte[]> previewFile(
+            @Parameter(description = "The stored URL returned by the upload service") @RequestParam("url") String fileUrl) {
+
+        log.debug("Preview file request received");
+
+        byte[] data = storageService.downloadFileByUrl(fileUrl);
+        String filename = extractFilename(fileUrl);
+        String contentType = contentTypeFromFilename(filename);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(contentType));
+        headers.setContentLength(data.length);
+        headers.set(HttpHeaders.CONTENT_DISPOSITION,
+                "inline; filename=\"" + filename.replace("\"", "") + "\"");
+        headers.setCacheControl("private, max-age=300");
+
+        return new ResponseEntity<>(data, headers, HttpStatus.OK);
+    }
+
+    private String extractFilename(String fileUrl) {
+        try {
+            String path = java.net.URI.create(fileUrl).getPath();
+            int lastSlash = path == null ? -1 : path.lastIndexOf('/');
+            String filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : "file";
+            return filename.isBlank() ? "file" : filename;
+        } catch (IllegalArgumentException ex) {
+            return "file";
+        }
+    }
+
+    private String contentTypeFromFilename(String filename) {
+        String lower = filename.toLowerCase(java.util.Locale.ROOT);
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".bmp")) return "image/bmp";
+        if (lower.endsWith(".avif")) return "image/avif";
+        if (lower.endsWith(".pdf")) return "application/pdf";
+        return "application/octet-stream";
+    }
+
+    /**
      * Validate uploaded file: not empty, within size limit, valid image type.
      */
     private void validateFile(MultipartFile file) {

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useCreateProject } from '../../features/projects/api/projectApi';
 import { ProjectForm } from '../../features/projects/components/ProjectForm';
 import type { ProjectFormData } from '../../features/projects/types/project.schemas';
+import { getApiErrorMessage } from '../../services/apiError';
 
 export default function ProjectCreatePage() {
   const navigate = useNavigate();
@@ -14,9 +15,8 @@ export default function ProjectCreatePage() {
         toast.success('Dự án đã được tạo thành công!');
         navigate('/projects');
       },
-      onError: (error: any) => {
-        const message = error?.response?.data?.message || 'Có lỗi xảy ra khi tạo dự án';
-        toast.error(message);
+      onError: (error: unknown) => {
+        toast.error(getApiErrorMessage(error, 'Có lỗi xảy ra khi tạo dự án.'));
       }
     });
   };

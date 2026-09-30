@@ -9,11 +9,13 @@ import { useLogin } from '../api/authApi';
 import { type LoginFormData, loginSchema } from '../types/auth.schemas';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import { getApiErrorInfo } from '../../../services/apiError';
 
 export function LoginForm() {
   const navigate = useNavigate();
   const loginMutation = useLogin();
   const [showPassword, setShowPassword] = useState(false);
+  const [supportCode, setSupportCode] = useState<string | null>(null);
 
   const {
     register,
@@ -26,26 +28,15 @@ export function LoginForm() {
 
   const onSubmit = useCallback(
     (data: LoginFormData) => {
+      setSupportCode(null);
       loginMutation.mutate(data, {
         onSuccess: () => {
           navigate('/', { replace: true });
         },
         onError: (err: unknown) => {
-          const apiMessage = (err as { response?: { data?: { message?: unknown } } })
-            .response?.data?.message;
-          let message = typeof apiMessage === 'string'
-            ? apiMessage
-            : 'Đăng nhập thất bại. Vui lòng thử lại!';
-          if (typeof message === 'string') {
-            if (message.includes('Bad credentials')) {
-              message = 'Tên đăng nhập hoặc mật khẩu không chính xác!';
-            } else if (message.includes('not activated') || message.includes('OTP')) {
-              message = 'Tài khoản chưa được kích hoạt. Vui lòng xác thực mã OTP!';
-            } else if (message.includes('User not found')) {
-              message = 'Tài khoản không tồn tại trong hệ thống!';
-            }
-          }
-          setError('root', { type: 'manual', message });
+          const info = getApiErrorInfo(err, 'Đăng nhập thất bại. Vui lòng thử lại.');
+          setSupportCode(info.supportCode ?? null);
+          setError('root', { type: 'manual', message: info.message });
         },
       });
     },
@@ -85,7 +76,12 @@ export function LoginForm() {
 
       {errors.root && (
         <div role="alert" className="rounded-xl border border-[var(--color-danger)]/20 bg-[var(--color-danger-bg)] p-3 text-sm font-medium text-[var(--color-danger)]">
-          {errors.root.message}
+          <p>{errors.root.message}</p>
+          {supportCode && (
+            <p className="mt-1 text-xs font-normal opacity-75">
+              Mã hỗ trợ: {supportCode}. Chỉ cung cấp mã này khi liên hệ quản trị viên.
+            </p>
+          )}
         </div>
       )}
 

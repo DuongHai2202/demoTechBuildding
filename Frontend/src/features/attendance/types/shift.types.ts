@@ -36,6 +36,11 @@ export interface ShiftAssignment {
   scheduledEndAt: string;
   status: 'ASSIGNED' | 'CANCELLED' | string;
   notes: string | null;
+  lateCheckInApproved: boolean;
+  lateCheckInApprovedAt: string | null;
+  lateCheckInApprovalNote: string | null;
+  attendanceClaimed: boolean;
+  attendanceStatus: string | null;
   current: boolean;
   eligibleForCheckIn: boolean;
   windowMessage: string;
@@ -55,6 +60,14 @@ export interface ShiftTemplateRequest {
 }
 
 export interface ShiftAssignmentRequest {
+  projectId: number;
+  userId: number;
+  shiftTemplateId: number;
+  workDate: string;
+  notes?: string;
+}
+
+export interface FullDayShiftAssignmentRequest {
   projectId: number;
   userId: number;
   shiftTemplateId: number;

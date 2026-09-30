@@ -4,8 +4,9 @@ import { useUsers } from '../../users/api/userApi';
 import { DataTable, type ColumnDef } from '../../../components/ui/DataTable';
 import type { ProjectMember } from '../types/project.types';
 import { Button } from '../../../components/ui/Button';
-import { UserPlusIcon, TrashIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { UserPlusIcon, TrashIcon, MagnifyingGlassIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { useActionDialog } from '../../../components/ui/ActionDialog';
+import { MemberShiftAssignmentDialog } from '../../attendance/components/MemberShiftAssignmentDialog';
 
 interface MemberManagerProps {
   projectId: number;
@@ -28,6 +29,7 @@ export function MemberManager({ projectId }: MemberManagerProps) {
   // States for inline editing
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [tempRole, setTempRole] = useState<string>('');
+  const [shiftMember, setShiftMember] = useState<ProjectMember | null>(null);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +89,25 @@ export function MemberManager({ projectId }: MemberManagerProps) {
           </span>
         )
       )
+    },
+    {
+      key: 'shift',
+      header: 'Lịch ca',
+      render: (m) => m.active === false ? (
+        <span className="text-xs text-[var(--color-text-muted)]">Ngừng tham gia</span>
+      ) : !permissions.canManageShifts ? (
+        <span className="text-xs text-[var(--color-text-muted)]">Chỉ quản lý dự án</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShiftMember(m)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-primary)]/25 px-2.5 py-1.5 text-xs font-semibold text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary-light)]"
+          title="Xem và phân lịch ca"
+        >
+          <ClockIcon className="size-4" />
+          Phân ca
+        </button>
+      ),
     },
     {
       key: 'actions',
@@ -226,6 +247,16 @@ export function MemberManager({ projectId }: MemberManagerProps) {
         isLoading={isLoading}
         emptyMessage="Chưa có thành viên nào tham gia dự án."
       />
+
+      {shiftMember && (
+        <MemberShiftAssignmentDialog
+          projectId={projectId}
+          userId={shiftMember.userId}
+          fullName={shiftMember.fullName}
+          username={shiftMember.username}
+          onClose={() => setShiftMember(null)}
+        />
+      )}
     </div>
   );
 }

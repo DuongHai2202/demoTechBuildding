@@ -10,6 +10,7 @@ import com.techbuildding.demoTechBuildding.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,7 +23,10 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
 
     @Override
-    @Transactional
+    // A notification is a side effect. Do not mark the assignment/workflow
+    // transaction rollback-only when the notification store is temporarily
+    // unavailable; the next poll can still show the saved assignment.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendNotification(Long userId, String title, String message, String type, String targetUrl) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Recipient user not found: " + userId));

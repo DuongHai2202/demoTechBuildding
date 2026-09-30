@@ -35,6 +35,9 @@ public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, Lo
     List<AttendanceLog> findByUserIdAndProjectIdAndStatusAndCheckInAtBetweenOrderByCheckInAtDesc(
             Long userId, Integer projectId, String status, LocalDateTime start, LocalDateTime end);
 
+    List<AttendanceLog> findByUserIdAndProjectIdAndStatusInAndCheckInAtBetweenOrderByCheckInAtDesc(
+            Long userId, Integer projectId, Collection<String> statuses, LocalDateTime start, LocalDateTime end);
+
     // Lấy lịch sử chấm công theo khoảng thời gian
     List<AttendanceLog> findByProjectIdAndCheckInAtBetween(Integer projectId, LocalDateTime start, LocalDateTime end);
 
@@ -65,4 +68,11 @@ public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, Lo
     @Query("select count(a) > 0 from AttendanceLog a where a.shiftAssignment.id = :shiftAssignmentId and a.status in :statuses")
     boolean existsByShiftAssignmentAndStatusIn(@Param("shiftAssignmentId") Long shiftAssignmentId,
             @Param("statuses") Collection<String> statuses);
+
+    /**
+     * Returns the latest attendance state for a planned shift. The current
+     * shift screen still needs this record after ABSENT/COMPLETED so it can
+     * distinguish "already handled" from "not assigned".
+     */
+    Optional<AttendanceLog> findFirstByShiftAssignmentIdOrderByCreatedAtDesc(Long shiftAssignmentId);
 }

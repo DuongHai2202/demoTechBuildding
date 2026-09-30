@@ -2,6 +2,7 @@ package com.techbuildding.demoTechBuildding.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseError;
+import com.techbuildding.demoTechBuildding.exception.ApiErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -30,8 +31,10 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
             HttpServletResponse response,
             AccessDeniedException accessDeniedException) throws IOException {
 
-        log.warn("Access denied: {} {} - {}", request.getMethod(), request.getRequestURI(),
-                accessDeniedException.getMessage());
+        log.warn("API authorization rejected code={} method={} path={}",
+                ApiErrorCode.ACCESS_DENIED,
+                request.getMethod(),
+                request.getRequestURI());
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpStatus.FORBIDDEN.value());
@@ -39,7 +42,9 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 
         ResponseError error = new ResponseError(
                 HttpStatus.FORBIDDEN.value(),
-                "Bạn không có quyền thực hiện thao tác này.");
+                ApiErrorCode.ACCESS_DENIED,
+                "Bạn không có quyền thực hiện thao tác này. Nếu cần, hãy liên hệ quản trị viên để được cấp quyền.",
+                null);
 
         objectMapper.writeValue(response.getOutputStream(), error);
     }

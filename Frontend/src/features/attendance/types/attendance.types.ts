@@ -11,6 +11,7 @@ export interface Attendance {
   shiftAssignmentId?: number | null;
   shiftCode?: string | null;
   shiftName?: string | null;
+  overtimeEligible?: boolean | null;
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
   breakMinutes?: number | null;

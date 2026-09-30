@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useActionDialog } from '../components/ui/ActionDialog';
 import { Pagination } from '../components/ui/Pagination';
 import { PERMISSION_LABELS, ROLE_PERMISSION_MATRIX } from '../features/auth/authorization';
+import { getApiErrorMessage } from '../services/apiError';
 
 const STATUS_STYLE: Record<UserStatus, { label: string; cls: string }> = {
   ACTIVE: { label: 'Hoạt động', cls: 'bg-[var(--color-success-bg)] text-[var(--color-success)]' },
@@ -42,12 +43,6 @@ const PAGE_SIZE = 10;
 function normalizeUserStatus(status: UserStatus | string | undefined): UserStatus {
   const normalized = String(status ?? '').toUpperCase();
   return normalized in STATUS_STYLE ? normalized as UserStatus : 'PENDING';
-}
-
-function getApiErrorMessage(error: unknown, fallback: string) {
-  const message = (error as { response?: { data?: { message?: unknown } } })
-    .response?.data?.message;
-  return typeof message === 'string' ? message : fallback;
 }
 
 function isProtectedAdmin(user: User) {

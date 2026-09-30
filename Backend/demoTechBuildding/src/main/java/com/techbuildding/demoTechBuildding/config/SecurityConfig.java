@@ -80,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/users/me/face-descriptor").authenticated()
                         .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/role-requests").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/role-requests/me").authenticated()
                         .requestMatchers("/api/v1/role-requests/**").hasRole("ADMIN")
 
                         // Notifications and authenticated file downloads are available
@@ -87,6 +88,7 @@ public class SecurityConfig {
                         // operational role.
                         .requestMatchers("/api/v1/notifications/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/files/download").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/files/preview").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasAnyRole("ADMIN", "PM", "STAFF", "PARTNER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/files/**").hasAnyRole("ADMIN", "PM")
 

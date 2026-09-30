@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/axiosInstance';
 import { toast } from 'sonner';
 import type { ApiResponse } from '../../../types/api.types';
+import { getApiErrorMessage } from '../../../services/apiError';
 import type { 
   Material, 
   MaterialRequest, 
@@ -204,8 +205,8 @@ export function useCheckMaterialRequest() {
       queryClient.invalidateQueries({ queryKey: MATERIAL_REQUESTS_KEY });
       toast.success('Đã chuyển trạng thái sang: KIỂM TRA');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi kiểm tra: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi kiểm tra: ${getApiErrorMessage(err, 'Không thể chuyển yêu cầu sang trạng thái kiểm tra.')}`);
     }
   });
 }
@@ -223,8 +224,8 @@ export function useApproveMaterialRequest() {
       queryClient.invalidateQueries({ queryKey: MATERIAL_REQUESTS_KEY });
       toast.success('Đã PHÊ DUYỆT yêu cầu vật tư');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi phê duyệt: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi phê duyệt: ${getApiErrorMessage(err, 'Không thể phê duyệt yêu cầu vật tư.')}`);
     }
   });
 }
@@ -242,8 +243,8 @@ export function useRejectMaterialRequest() {
       queryClient.invalidateQueries({ queryKey: MATERIAL_REQUESTS_KEY });
       toast.success('Đã TỪ CHỐI yêu cầu vật tư');
     },
-    onError: (err: any) => {
-      toast.error(`Lỗi khi từ chối: ${err?.response?.data?.message || err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Lỗi khi từ chối: ${getApiErrorMessage(err, 'Không thể từ chối yêu cầu vật tư.')}`);
     }
   });
 }

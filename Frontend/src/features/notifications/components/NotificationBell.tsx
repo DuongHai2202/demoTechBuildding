@@ -16,6 +16,8 @@ export function NotificationBell() {
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const user = useAuthStore((state) => state.user);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const knownNotificationIdsRef = useRef<Set<number> | null>(null);
+  const notificationOwnerRef = useRef<number | null>(null);
   const navigate = useNavigate();
 
   const {
@@ -27,6 +29,47 @@ export function NotificationBell() {
   } = useNotifications(Boolean(user?.id));
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
+
+  useEffect(() => {
+    if (notificationOwnerRef.current !== (user?.id ?? null)) {
+      notificationOwnerRef.current = user?.id ?? null;
+      knownNotificationIdsRef.current = null;
+    }
+
+    if (!user?.id) {
+      return;
+    }
+
+    // The query starts with an empty fallback while the first response is in
+    // flight. Wait until that response arrives so old notifications are not
+    // shown as new toast messages after login.
+    if (isLoading) return;
+
+    const currentIds = new Set(notifications.map((notification) => notification.id));
+    // Do not toast historical notifications on the first load after login.
+    if (knownNotificationIdsRef.current === null) {
+      knownNotificationIdsRef.current = currentIds;
+      return;
+    }
+
+    notifications
+      .filter((notification) => !notification.isRead && !knownNotificationIdsRef.current?.has(notification.id))
+      .slice(0, 3)
+      .forEach((notification) => {
+        toast.info(notification.title, {
+          description: notification.message,
+          duration: 7_000,
+          action: notification.targetUrl
+            ? {
+                label: 'Mở',
+                onClick: () => navigate(getNotificationDestination(notification.targetUrl)),
+              }
+            : undefined,
+        });
+      });
+
+    knownNotificationIdsRef.current = currentIds;
+  }, [isLoading, navigate, notifications, user?.id]);
 
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
   const visibleNotifications = useMemo(

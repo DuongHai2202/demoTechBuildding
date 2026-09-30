@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { loadFaceModels } from '../../../utils/faceModels';
 import type { ApiResponse } from '../../../types/api.types';
 import type { User } from '../../users/types/user.types';
+import { getApiErrorMessage } from '../../../services/apiError';
 
 export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }) {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
@@ -114,11 +115,7 @@ export function FaceRegistrationModal({ onComplete }: { onComplete: () => void }
         onComplete();
       }, 1500);
     } catch (e: unknown) {
-      console.error(e);
-      const response = e && typeof e === 'object' && 'response' in e
-        ? (e as { response?: { data?: { message?: string } } }).response
-        : undefined;
-      const errorMsg = response?.data?.message || 'Lưu thất bại. Thử lại sau.';
+      const errorMsg = getApiErrorMessage(e, 'Lưu khuôn mặt thất bại. Vui lòng thử lại sau.');
       setSaveError(errorMsg);
       // A descriptor that failed to persist must not remain in the captured
       // state, otherwise the user sees a green check and assumes registration
