@@ -9,6 +9,7 @@ import {
   formatDuration,
   formatTime,
   getCalendarRange,
+  getEffectiveAttendanceStatus,
   getLocalDateKey,
   getLocalDateInputValue,
   getMinutesForAttendance,
@@ -34,7 +35,9 @@ function statusMeta(status: string) {
     case 'CHECKED_IN':
       return { label: 'Đang làm', color: 'var(--color-info)', dot: 'bg-[var(--color-info)]' };
     case 'MISSING_CHECKOUT':
-      return { label: 'Thiếu checkout', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
+      return { label: 'Thiếu checkout · chờ xử lý', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
+    case 'ABSENT':
+      return { label: 'Vắng · thiếu checkout', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
     case 'PENDING_REVIEW':
       return { label: 'Chờ kiểm tra', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'FAILED':
@@ -86,8 +89,8 @@ function CalendarDay({
 }) {
   const minutes = logs.reduce((total, log) => total + (getMinutesForAttendance(log, now) ?? 0), 0);
   const durationLogs = logs.filter((log) => getMinutesForAttendance(log, now) != null).length;
-  const reviewCount = logs.filter((log) => ['FAILED', 'MISSING_CHECKOUT', 'PENDING_REVIEW'].includes(log.status) || log.overtimeStatus === 'PENDING').length;
-  const activeCount = logs.filter((log) => log.status === 'CHECKED_IN' && !log.checkOutAt).length;
+  const reviewCount = logs.filter((log) => ['FAILED', 'MISSING_CHECKOUT', 'ABSENT', 'PENDING_REVIEW'].includes(getEffectiveAttendanceStatus(log, now)) || log.overtimeStatus === 'PENDING').length;
+  const activeCount = logs.filter((log) => getEffectiveAttendanceStatus(log, now) === 'CHECKED_IN' && !log.checkOutAt).length;
   const dateKey = getLocalDateInputValue(date);
   const compactStatus = reviewCount > 0
     ? `${reviewCount} cần xem`
@@ -223,15 +226,16 @@ export function AttendanceCalendar({
         {selectedLogs.length > 0 ? (
           <div className="divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
             {selectedLogs.map((log) => {
-              const meta = statusMeta(log.status);
+              const displayStatus = getEffectiveAttendanceStatus(log, now);
+              const meta = statusMeta(displayStatus);
               const minutes = getMinutesForAttendance(log, now);
-              const duration = log.status === 'FAILED' ? 'Không tính' : formatDuration(minutes);
+              const duration = displayStatus === 'FAILED' ? 'Không tính' : formatDuration(minutes);
               return (
                 <div key={log.id} className="grid grid-cols-1 items-center gap-2 px-3 py-3 sm:grid-cols-[minmax(96px,0.3fr)_minmax(0,1fr)_minmax(130px,0.45fr)] sm:gap-4 sm:px-4">
                   <div className="text-xs font-semibold text-[var(--color-text-primary)] sm:text-sm">
-                    <p>{formatTime(log.checkInAt)} – {log.status === 'FAILED' ? '—' : formatTime(log.checkOutAt)}</p>
+                    <p>{formatTime(log.checkInAt)} – {displayStatus === 'FAILED' ? '—' : formatTime(log.checkOutAt)}</p>
                     <p className="mt-1 text-xs font-normal text-[var(--color-text-muted)]">
-                      {log.status === 'FAILED'
+                      {displayStatus === 'FAILED'
                         ? 'Lần thử không hợp lệ'
                         : log.shiftName
                           ? `${log.shiftName}${log.shiftCode ? ` · ${log.shiftCode}` : ''}`

@@ -20,6 +20,7 @@ import {
   formatCalendarHeading,
   formatDateTime,
   formatDuration,
+  getEffectiveAttendanceStatus,
   getCalendarRange,
   getLocalDateInputValue,
   getMinutesForAttendance,
@@ -35,7 +36,9 @@ function statusMeta(status: string) {
     case 'CHECKED_IN':
       return { label: 'Đang làm', color: 'var(--color-info)', dot: 'bg-[var(--color-info)]' };
     case 'MISSING_CHECKOUT':
-      return { label: 'Thiếu checkout', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
+      return { label: 'Thiếu checkout · chờ xử lý', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
+    case 'ABSENT':
+      return { label: 'Vắng · thiếu checkout', color: 'var(--color-danger)', dot: 'bg-[var(--color-danger)]' };
     case 'PENDING_REVIEW':
       return { label: 'Chờ kiểm tra', color: 'var(--color-warning)', dot: 'bg-[var(--color-warning)]' };
     case 'FAILED':
@@ -78,8 +81,8 @@ export function AttendanceHistory() {
   const logs = (scope === 'project' ? projectLogs : personalLogs) || [];
   const isLoading = scope === 'project' ? isProjectLoading : isPersonalLoading;
   const completedLogs = logs.filter((log) => log.status === 'COMPLETED' && log.checkOutAt);
-  const activeLogs = logs.filter((log) => log.status === 'CHECKED_IN' && !log.checkOutAt);
-  const reviewLogs = logs.filter((log) => ['FAILED', 'MISSING_CHECKOUT', 'PENDING_REVIEW'].includes(log.status) || log.overtimeStatus === 'PENDING');
+  const activeLogs = logs.filter((log) => getEffectiveAttendanceStatus(log, now) === 'CHECKED_IN' && !log.checkOutAt);
+  const reviewLogs = logs.filter((log) => ['FAILED', 'MISSING_CHECKOUT', 'ABSENT', 'PENDING_REVIEW'].includes(getEffectiveAttendanceStatus(log, now)) || log.overtimeStatus === 'PENDING');
   const totalMinutes = logs.reduce((sum, log) => sum + (getMinutesForAttendance(log, now) ?? 0), 0);
   const approvedOvertimeMinutes = logs.reduce((sum, log) => sum + (log.overtimeApprovedMinutes ?? 0), 0);
 
@@ -156,11 +159,12 @@ export function AttendanceHistory() {
       header: 'Thời lượng',
       render: (log: Attendance) => {
         const minutes = getMinutesForAttendance(log, now);
-        const isLive = log.status === 'CHECKED_IN' && !log.checkOutAt;
+        const displayStatus = getEffectiveAttendanceStatus(log, now);
+        const isLive = displayStatus === 'CHECKED_IN' && !log.checkOutAt;
         return (
           <div className="min-w-32">
             <p className={`font-bold ${isLive ? 'text-[var(--color-info)]' : 'text-[var(--color-text-primary)]'}`}>
-              {isLive ? 'Đang làm · ' : ''}{log.status === 'FAILED' ? 'Không tính' : formatDuration(minutes)}
+              {isLive ? 'Đang làm · ' : ''}{displayStatus === 'FAILED' ? 'Không tính' : formatDuration(minutes)}
             </p>
             {minutes != null && <p className="text-xs text-[var(--color-text-muted)]">{minutes} phút</p>}
           </div>
@@ -183,7 +187,7 @@ export function AttendanceHistory() {
       key: 'status',
       header: 'Trạng thái',
       render: (log: Attendance) => {
-        const meta = statusMeta(log.status);
+        const meta = statusMeta(getEffectiveAttendanceStatus(log, now));
         return (
           <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: meta.color }}>
             <span className={`size-2 rounded-full ${meta.dot}`} />

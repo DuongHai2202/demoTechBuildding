@@ -26,9 +26,9 @@ public interface AttendanceMapper {
     @Mapping(target = "shiftCode", source = "shiftAssignment.shiftTemplate.code")
     @Mapping(target = "shiftName", source = "shiftAssignment.shiftTemplate.name")
     @Mapping(target = "status", expression = "java(resolveStatus(log))")
-    @Mapping(target = "workingHours", expression = "java(calcHours(log.getCheckInAt(), log.getCheckOutAt(), log.getBreakMinutes()))")
-    @Mapping(target = "workingMinutes", expression = "java(calcMinutes(log.getCheckInAt(), log.getCheckOutAt(), log.getBreakMinutes()))")
-    @Mapping(target = "durationText", expression = "java(formatDuration(log.getCheckInAt(), log.getCheckOutAt(), log.getBreakMinutes()))")
+    @Mapping(target = "workingHours", expression = "java(calcHours(log))")
+    @Mapping(target = "workingMinutes", expression = "java(calcMinutes(log))")
+    @Mapping(target = "durationText", expression = "java(formatDuration(log))")
     AttendanceResponseDTO toResponseDTO(AttendanceLog log);
 
     List<AttendanceResponseDTO> toResponseDTOList(List<AttendanceLog> logs);
@@ -77,8 +77,59 @@ public interface AttendanceMapper {
         return hours + " giờ " + remainingMinutes + " phút";
     }
 
-    /** Keep the stored event immutable while making an abandoned open shift visible in history. */
+    /**
+     * A planned shift that was not checked out by its scheduled end is an
+     * absence, not a live session. Keep this rule in the response mapping as
+     * a safety net for legacy rows that have not yet been auto-finalized by the
+     * service read path.
+     */
+    default Long calcMinutes(AttendanceLog log) {
+        if (log == null) {
+            return null;
+        }
+        if ("ABSENT".equals(resolveStatus(log))) {
+            return 0L;
+        }
+        return calcMinutes(log.getCheckInAt(), log.getCheckOutAt(), log.getBreakMinutes());
+    }
+
+    default Double calcHours(AttendanceLog log) {
+        Long minutes = calcMinutes(log);
+        return minutes == null ? null : minutes / 60.0;
+    }
+
+    default String formatDuration(AttendanceLog log) {
+        Long minutes = calcMinutes(log);
+        return formatDuration(minutes);
+    }
+
+    default String formatDuration(Long minutes) {
+        if (minutes == null) {
+            return null;
+        }
+        long hours = minutes / 60;
+        long remainingMinutes = minutes % 60;
+        if (hours == 0) {
+            return remainingMinutes + " phút";
+        }
+        if (remainingMinutes == 0) {
+            return hours + " giờ";
+        }
+        return hours + " giờ " + remainingMinutes + " phút";
+    }
+
+    /** Safety-net status for legacy rows that may be read before a service refresh. */
     default String resolveStatus(AttendanceLog log) {
+        if (log == null || log.getStatus() == null) {
+            return null;
+        }
+        if ("CHECKED_IN".equals(log.getStatus())
+                && log.getCheckOutAt() == null
+                && log.getCheckInAt() != null
+                && log.getScheduledEndAt() != null
+                && LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).isAfter(log.getScheduledEndAt())) {
+            return "ABSENT";
+        }
         if ("CHECKED_IN".equals(log.getStatus())
                 && log.getCheckOutAt() == null
                 && log.getCheckInAt() != null

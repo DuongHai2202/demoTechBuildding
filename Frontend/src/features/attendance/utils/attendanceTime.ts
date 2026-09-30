@@ -10,12 +10,33 @@ export function getLocalDateInputValue(date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getMinutesForAttendance(attendance: Pick<Attendance, 'workingMinutes' | 'checkInAt' | 'checkOutAt' | 'status'>, now = new Date()): number | null {
+export function getEffectiveAttendanceStatus(
+  attendance: Pick<Attendance, 'status' | 'checkOutAt' | 'scheduledEndAt'>,
+  now = new Date(),
+): string {
+  const hasMissingCheckout = !attendance.checkOutAt
+    && ['CHECKED_IN', 'MISSING_CHECKOUT'].includes(attendance.status)
+    && !!attendance.scheduledEndAt;
+  if (hasMissingCheckout) {
+    const scheduledEnd = new Date(attendance.scheduledEndAt as string).getTime();
+    if (Number.isFinite(scheduledEnd) && now.getTime() > scheduledEnd) {
+      return 'ABSENT';
+    }
+  }
+  return attendance.status;
+}
+
+export function getMinutesForAttendance(
+  attendance: Pick<Attendance, 'workingMinutes' | 'checkInAt' | 'checkOutAt' | 'status' | 'scheduledEndAt'>,
+  now = new Date(),
+): number | null {
+  const effectiveStatus = getEffectiveAttendanceStatus(attendance, now);
+  if (effectiveStatus === 'ABSENT') return 0;
   if (attendance.workingMinutes != null && Number.isFinite(attendance.workingMinutes)) {
     return Math.max(0, Math.floor(attendance.workingMinutes));
   }
   if (!attendance.checkInAt) return null;
-  if (!attendance.checkOutAt && attendance.status !== 'CHECKED_IN') return null;
+  if (!attendance.checkOutAt && effectiveStatus !== 'CHECKED_IN') return null;
 
   const start = new Date(attendance.checkInAt).getTime();
   const end = attendance.checkOutAt ? new Date(attendance.checkOutAt).getTime() : now.getTime();

@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,6 +37,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -63,7 +65,11 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final double MAX_GPS_ACCURACY_METERS = 150.0;
     private static final Duration MAX_ATTENDANCE_SESSION = Duration.ofHours(24);
-    private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED");
+    /** Terminal states that consume the assigned shift and prevent re-check-in. */
+    private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED", "ABSENT");
+    private static final String ABSENT_STATUS = "ABSENT";
+    private static final String AUTO_ABSENCE_REMARK =
+            "Tự động chốt vắng: đã quá giờ kết thúc ca nhưng chưa checkout.";
     private static final String OVERTIME_NONE = "NONE";
     private static final String OVERTIME_PENDING = "PENDING";
     private static final String OVERTIME_APPROVED = "APPROVED";
@@ -87,6 +93,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         validateProjectMembership(userId, request.getProjectId());
 
         LocalDateTime checkInAt = now();
+        // Close abandoned planned shifts before checking for an active session.
+        // This lets the next valid shift proceed while preserving the original
+        // check-in record for audit and reporting.
+        finalizeOverdueOpenLogs(checkInAt);
         // Staff must have a concrete assignment for the current project/date.
         // ADMIN/PM can perform an operational override, but the record will
         // remain visibly unscheduled instead of pretending to be a planned ca.
@@ -168,12 +178,26 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         Project project = findProjectOrThrow(projectId);
 
+        LocalDateTime checkOutAt = now();
+        Optional<AttendanceLog> activeBeforeFinalization = attendanceLogRepository
+                .findActiveForUpdate(userId, projectId);
+        if (activeBeforeFinalization.isPresent()) {
+            AttendanceLog overdueLog = activeBeforeFinalization.get();
+            backfillLegacySchedule(overdueLog);
+            if (isPastScheduledEnd(overdueLog, checkOutAt)) {
+                markAsAbsent(overdueLog);
+                attendanceLogRepository.save(overdueLog);
+                throw new BadRequestException(
+                        "Ca đã quá giờ kết thúc nhưng chưa checkout. Hệ thống đã chốt lượt này là Vắng do thiếu checkout; vui lòng liên hệ quản trị viên nếu cần điều chỉnh.");
+            }
+        }
+        finalizeOverdueOpenLogs(checkOutAt);
+
         // Find active check-in session
         AttendanceLog activeLog = attendanceLogRepository
                 .findActiveForUpdate(userId, projectId)
                 .orElseThrow(() -> new BadRequestException("Bạn chưa bắt đầu ca làm việc. Vui lòng chấm công vào ca trước."));
 
-        LocalDateTime checkOutAt = now();
         if (activeLog.getCheckInAt() == null || !checkOutAt.isAfter(activeLog.getCheckInAt())) {
             throw new BadRequestException("Thời điểm tan ca phải sau thời điểm vào ca.");
         }
@@ -282,12 +306,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    @Transactional
     public List<AttendanceResponseDTO> getPersonalHistory(Long userId, LocalDate startDate, LocalDate endDate) {
         log.info("Personal history: userId={}, {} to {}", userId, startDate, endDate);
 
         validateUserPermission(userId);
 
         validateDateRange(startDate, endDate);
+        finalizeOverdueOpenLogs(now());
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(LocalTime.MAX);
 
@@ -298,11 +324,13 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    @Transactional
     public List<AttendanceResponseDTO> getProjectHistory(Integer projectId, LocalDate startDate, LocalDate endDate) {
         log.info("Project history: projectId={}, {} to {}", projectId, startDate, endDate);
 
         validateProjectAccess(projectId);
         validateDateRange(startDate, endDate);
+        finalizeOverdueOpenLogs(now());
 
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(LocalTime.MAX);
@@ -314,12 +342,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    @Transactional
     public AttendanceResponseDTO getTodayRecord(Long userId, Integer projectId) {
         validateUserPermission(userId);
         // The project selector is only a UX aid. Enforce the same assignment
         // rule on this read endpoint so a user cannot query another project's
         // attendance record by changing the URL parameters manually.
         validateProjectMembership(userId, projectId);
+        finalizeOverdueOpenLogs(now());
         
         // 1. Check for active session first
         Optional<AttendanceLog> active = attendanceLogRepository
@@ -351,9 +381,11 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    @Transactional
     public List<AttendanceResponseDTO> getAllLogs(LocalDate startDate, LocalDate endDate) {
         log.info("Global history: {} to {}", startDate, endDate);
         validateDateRange(startDate, endDate);
+        finalizeOverdueOpenLogs(now());
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(LocalTime.MAX);
         List<AttendanceLog> logs = attendanceLogRepository.findByCheckInAtBetweenOrderByCheckInAtDesc(start, end);
@@ -465,6 +497,111 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private LocalDate businessDate() {
         return LocalDate.now(BUSINESS_ZONE);
+    }
+
+    /** Keep exports, dashboards and reports correct even when nobody opens the
+     * attendance page at the moment a shift expires. */
+    @Scheduled(
+            fixedDelayString = "${attendance.auto-finalize-fixed-delay-ms:60000}",
+            initialDelayString = "${attendance.auto-finalize-initial-delay-ms:60000}")
+    @Transactional
+    public void autoFinalizeOverdueAttendance() {
+        finalizeOverdueOpenLogs(now());
+    }
+
+    /**
+     * An open planned shift is only valid until its scheduled end. Once that
+     * deadline passes, leaving check_out_at null must not keep the user in an
+     * artificial "Đang làm" state or contribute live minutes. The record is
+     * retained and marked ABSENT so payroll/reporting can count zero work while
+     * the remarks explain why it was closed.
+     */
+    private void finalizeOverdueOpenLogs(LocalDateTime referenceTime) {
+        List<AttendanceLog> openLogs = attendanceLogRepository.findOpenAttendanceLogs("CHECKED_IN");
+        if (openLogs.isEmpty()) {
+            return;
+        }
+
+        List<AttendanceLog> changedLogs = new ArrayList<>();
+        for (AttendanceLog openLog : openLogs) {
+            boolean scheduleBackfilled = backfillLegacySchedule(openLog);
+            if (isPastScheduledEnd(openLog, referenceTime)) {
+                markAsAbsent(openLog);
+                changedLogs.add(openLog);
+            } else if (scheduleBackfilled) {
+                // Persist the inferred boundary so future scheduler runs can
+                // use an indexed scheduled_end_at query and the UI can explain
+                // which standard ca was applied to the legacy event.
+                changedLogs.add(openLog);
+            }
+        }
+        if (changedLogs.isEmpty()) {
+            return;
+        }
+        attendanceLogRepository.saveAll(changedLogs);
+        long absentCount = changedLogs.stream().filter(log -> ABSENT_STATUS.equals(log.getStatus())).count();
+        log.info("Auto-finalized overdue attendance logs as absent: count={}, cutoff={}",
+                absentCount, referenceTime);
+    }
+
+    private boolean isPastScheduledEnd(AttendanceLog attendanceLog, LocalDateTime referenceTime) {
+        return attendanceLog != null
+                && attendanceLog.getCheckOutAt() == null
+                && attendanceLog.getScheduledEndAt() != null
+                && referenceTime.isAfter(attendanceLog.getScheduledEndAt());
+    }
+
+    private void markAsAbsent(AttendanceLog attendanceLog) {
+        attendanceLog.setStatus(ABSENT_STATUS);
+        attendanceLog.setOvertimeMinutes(0L);
+        attendanceLog.setOvertimeStatus(OVERTIME_NONE);
+        attendanceLog.setOvertimeApprovedMinutes(0L);
+        attendanceLog.setEarlyLeaveMinutes(null);
+        attendanceLog.setRemarks(appendRemark(attendanceLog.getRemarks(), AUTO_ABSENCE_REMARK));
+    }
+
+    /**
+     * Attendance records created before shift planning have no end boundary.
+     * Use the agreed standard schedule only for those legacy open records:
+     * before 12:00 means the 08:00–12:00 morning ca, 12:00–22:00 means the
+     * 13:00–17:30 afternoon ca, and 22:00 onward means the overnight ca.
+     * New records always receive an explicit assignment snapshot at check-in.
+     */
+    private boolean backfillLegacySchedule(AttendanceLog attendanceLog) {
+        if (attendanceLog.getScheduledEndAt() != null || attendanceLog.getCheckInAt() == null) {
+            return false;
+        }
+
+        LocalDate workDate = attendanceLog.getCheckInAt().toLocalDate();
+        LocalTime checkInTime = attendanceLog.getCheckInAt().toLocalTime();
+        LocalDateTime scheduledStart;
+        LocalDateTime scheduledEnd;
+        if (!checkInTime.isAfter(LocalTime.NOON)) {
+            scheduledStart = LocalDateTime.of(workDate, LocalTime.of(8, 0));
+            scheduledEnd = LocalDateTime.of(workDate, LocalTime.NOON);
+        } else if (checkInTime.isBefore(LocalTime.of(22, 0))) {
+            scheduledStart = LocalDateTime.of(workDate, LocalTime.of(13, 0));
+            scheduledEnd = LocalDateTime.of(workDate, LocalTime.of(17, 30));
+        } else {
+            scheduledStart = LocalDateTime.of(workDate, LocalTime.of(22, 0));
+            scheduledEnd = LocalDateTime.of(workDate.plusDays(1), LocalTime.of(6, 0));
+        }
+        attendanceLog.setScheduledStartAt(scheduledStart);
+        attendanceLog.setScheduledEndAt(scheduledEnd);
+        if (attendanceLog.getBreakMinutes() == null) {
+            attendanceLog.setBreakMinutes(0);
+        }
+        return true;
+    }
+
+    private String appendRemark(String currentRemark, String additionalRemark) {
+        if (currentRemark == null || currentRemark.isBlank()) {
+            return additionalRemark;
+        }
+        if (currentRemark.contains(additionalRemark)) {
+            return currentRemark;
+        }
+        return currentRemark.trim() + " " + additionalRemark;
     }
 
     private User findUserOrThrow(Long userId) {

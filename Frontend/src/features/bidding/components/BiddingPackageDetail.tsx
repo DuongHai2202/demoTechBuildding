@@ -1,16 +1,20 @@
-import { useState } from 'react';
-import { 
-  XMarkIcon, 
-  CalendarIcon, 
-  CurrencyDollarIcon, 
-  InformationCircleIcon,
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRightIcon,
+  BuildingOffice2Icon,
+  CalendarDaysIcon,
+  CheckCircleIcon,
   ClipboardDocumentCheckIcon,
+  CurrencyDollarIcon,
+  InformationCircleIcon,
   PlusIcon,
   ScaleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+
 import { BidComparisonTable } from './BidComparisonTable';
 import { BidSubmissionForm } from './BidSubmissionForm';
-import type { BiddingPackage } from '../types/bidding.types';
+import type { BiddingPackage, BiddingStatus } from '../types/bidding.types';
 import { formatCurrency } from '../../../utils/formatCurrency';
 import { formatDate } from '../../../utils/formatDate';
 import { useProject } from '../../projects/api/projectApi';
@@ -22,206 +26,295 @@ interface BiddingPackageDetailProps {
   onClose: () => void;
 }
 
+type Criterion = { name: string; weight: number };
+
+const STATUS_META: Record<BiddingStatus, { label: string; className: string; dotClass: string }> = {
+  DRAFT: { label: 'Bản nháp', className: 'bg-slate-100 text-slate-700', dotClass: 'bg-slate-400' },
+  PENDING: { label: 'Chờ xử lý', className: 'bg-amber-50 text-amber-700', dotClass: 'bg-amber-500' },
+  PUBLISHED: { label: 'Đã công bố', className: 'bg-emerald-50 text-emerald-700', dotClass: 'bg-emerald-500' },
+  OPEN: { label: 'Đang nhận hồ sơ', className: 'bg-sky-50 text-sky-700', dotClass: 'bg-sky-500' },
+  BIDDING: { label: 'Đang đấu thầu', className: 'bg-sky-50 text-sky-700', dotClass: 'bg-sky-500' },
+  INVITING: { label: 'Đang mời thầu', className: 'bg-sky-50 text-sky-700', dotClass: 'bg-sky-500' },
+  EVALUATING: { label: 'Đang đánh giá', className: 'bg-amber-50 text-amber-700', dotClass: 'bg-amber-500' },
+  AWARDED: { label: 'Đã chọn nhà thầu', className: 'bg-emerald-50 text-emerald-700', dotClass: 'bg-emerald-500' },
+  CLOSED: { label: 'Đã đóng', className: 'bg-slate-100 text-slate-600', dotClass: 'bg-slate-400' },
+  CANCELLED: { label: 'Đã hủy', className: 'bg-rose-50 text-rose-700', dotClass: 'bg-rose-500' },
+};
+
+const WORKFLOW_STEPS = [
+  { label: 'Chuẩn bị', description: 'Tạo gói & tiêu chí' },
+  { label: 'Mời thầu', description: 'Nhận hồ sơ' },
+  { label: 'Đánh giá', description: 'So sánh & chấm' },
+  { label: 'Kết quả', description: 'Chọn nhà thầu' },
+];
+
+const OPEN_STATUSES: BiddingStatus[] = ['PUBLISHED', 'OPEN', 'BIDDING', 'INVITING'];
+
 export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackageDetailProps) {
   const { data: project } = useProject(biddingPackage.projectId);
   const user = useAuthStore((state) => state.user);
   const canManageBidding = hasPermission(user, 'BIDDING_MANAGE');
   const canSubmitBid = hasPermission(user, 'BIDDING_READ');
   const [showSubmissionForm, setShowSubmissionForm] = useState(false);
-  const canReceiveSubmissions = !['CLOSED', 'AWARDED', 'CANCELLED'].includes(biddingPackage.status);
+  const criteria = useMemo(() => parseCriteria(biddingPackage.criteria), [biddingPackage.criteria]);
+  const workflowIndex = getWorkflowIndex(biddingPackage.status);
+  const canReceiveSubmissions = OPEN_STATUSES.includes(biddingPackage.status);
+  const projectName = project?.name || `Dự án #${biddingPackage.projectId}`;
 
-  const statusMeta: Record<string, { label: string; className: string }> = {
-    DRAFT: { label: 'Bản nháp', className: 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]' },
-    PENDING: { label: 'Chờ xử lý', className: 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]' },
-    PUBLISHED: { label: 'Đã công bố', className: 'bg-[var(--color-success-bg)] text-[var(--color-success)]' },
-    OPEN: { label: 'Đang nhận hồ sơ', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
-    BIDDING: { label: 'Đang đấu thầu', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
-    INVITING: { label: 'Đang mời thầu', className: 'bg-[var(--color-info-bg)] text-[var(--color-info)]' },
-    EVALUATING: { label: 'Đang đánh giá', className: 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]' },
-    AWARDED: { label: 'Đã chọn nhà thầu', className: 'bg-[var(--color-success-bg)] text-[var(--color-success)]' },
-    CLOSED: { label: 'Đã đóng', className: 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)]' },
-    CANCELLED: { label: 'Đã hủy', className: 'bg-[var(--color-danger-bg)] text-[var(--color-danger)]' },
-  };
-  const currentStatus = statusMeta[biddingPackage.status] || statusMeta.DRAFT;
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-surface)] overflow-hidden rounded-3xl shadow-[var(--shadow-modal-theme)] animate-in zoom-in-95 duration-300 border border-[var(--color-border)]">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)] bg-[var(--color-surface-alt)]/50">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-[var(--color-primary-light)] rounded-2xl">
-            <ClipboardDocumentCheckIcon className="size-6 text-[var(--color-primary)]" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-[var(--color-text-primary)] uppercase tracking-tight">
-              Chi tiết gói thầu: {biddingPackage.packageName}
-            </h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs font-mono font-bold text-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-0.5 rounded">
-                #{biddingPackage.packageCode}
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${currentStatus.className}`}>
-                {currentStatus.label}
-              </span>
+    <div className="flex h-full flex-col overflow-hidden bg-[var(--color-surface)]">
+      <header className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+            <div className="hidden shrink-0 rounded-2xl bg-[var(--color-primary-light)] p-3 sm:block">
+              <ClipboardDocumentCheckIcon className="size-6 text-[var(--color-primary)]" />
             </div>
-          </div>
-        </div>
-        <button 
-          onClick={onClose}
-          className="p-2 rounded-xl hover:bg-[var(--color-danger-bg)] hover:text-[var(--color-danger)] text-[var(--color-text-muted)] transition-all active:scale-90"
-        >
-          <XMarkIcon className="size-6" />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
-        {/* Basic Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/50 flex items-start gap-4">
-            <div className="p-2.5 bg-[var(--color-info-bg)] rounded-xl">
-              <CurrencyDollarIcon className="size-5 text-[var(--color-info)]" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Ngân sách dự toán</p>
-              <p className="text-lg font-black text-[var(--color-text-primary)]">
-                {biddingPackage.budget ? formatCurrency(biddingPackage.budget) : 'N/A'}
-              </p>
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/50 flex items-start gap-4">
-            <div className="p-2.5 bg-[var(--color-danger-bg)] rounded-xl">
-              <CalendarIcon className="size-5 text-[var(--color-danger)]" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Hạn nộp hồ sơ</p>
-              <p className="text-lg font-black text-[var(--color-text-primary)]">
-                {formatDate(biddingPackage.deadline)}
-              </p>
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/50 flex items-start gap-4">
-            <div className="p-2.5 bg-[var(--color-warning-bg)] rounded-xl">
-              <InformationCircleIcon className="size-5 text-[var(--color-warning)]" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-widest">Dự án</p>
-              <p className="text-lg font-black text-[var(--color-text-primary)]">
-                {project?.name || `Dự án #${biddingPackage.projectId}`}
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                {project?.projectCode ? `${project.projectCode} · ` : ''}Mã hệ thống #{biddingPackage.projectId}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Description & Criteria */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-              <div className="w-1 h-4 bg-[var(--color-primary)] rounded-full"></div>
-              Mô tả chi tiết
-            </h3>
-            <div className="p-4 rounded-2xl bg-[var(--color-surface-alt)]/50 border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] leading-relaxed italic">
-              {biddingPackage.description || 'Chưa có mô tả chi tiết cho gói thầu này.'}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-              <div className="w-1 h-4 bg-[var(--color-success)] rounded-full"></div>
-              Tiêu chí lựa chọn
-            </h3>
-            <div className="p-4 rounded-2xl bg-[var(--color-surface-alt)]/50 border border-[var(--color-border)] text-sm text-[var(--color-text-secondary)] leading-relaxed">
-              {(() => {
-                if (!biddingPackage.criteria) return 'Chưa định nghĩa tiêu chí cụ thể.';
-                try {
-                  const criteriaList = JSON.parse(biddingPackage.criteria);
-                  if (Array.isArray(criteriaList)) {
-                    return (
-                      <div className="space-y-3">
-                        {criteriaList.map((c: any, i: number) => (
-                          <div key={i} className="flex flex-col gap-1.5">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-bold text-[var(--color-text-primary)]">{c.name}</span>
-                              <span className="font-mono text-[var(--color-primary)] font-black">{c.weight}%</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-[var(--color-border)] rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-[var(--color-primary)] rounded-full transition-all duration-1000 ease-out"
-                                style={{ width: `${c.weight}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }
-                } catch (e) {
-                  // Fallback to plain text if not JSON
-                  return biddingPackage.criteria;
-                }
-                return biddingPackage.criteria;
-              })()}
-            </div>
-          </div>
-        </div>
-
-        {/* Submissions Comparison Table */}
-        <div className="space-y-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-alt)]/25 p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <ScaleIcon className="size-5 text-[var(--color-primary)]" />
-                <h3 className="text-sm font-bold text-[var(--color-text-primary)] uppercase tracking-wide">
-                  So sánh hồ sơ dự thầu
-                </h3>
+            <div className="min-w-0">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-text-muted)]">
+                <span className="uppercase tracking-[0.14em] text-[var(--color-primary)]">Chi tiết gói thầu</span>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono text-[var(--color-text-secondary)]">#{biddingPackage.packageCode || 'Chưa có mã'}</span>
+                <StatusBadge status={biddingPackage.status} />
               </div>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-muted)]">
-                Đặt các nhà thầu cạnh nhau để kiểm tra giá so với ngân sách, hồ sơ năng lực, điều kiện thương mại và ghi nhận quyết định chọn thầu. Điểm giá chỉ là tham khảo; điểm kỹ thuật cần được người đánh giá xác nhận.
+              <h2 className="max-w-4xl text-lg font-extrabold leading-7 text-[var(--color-text-primary)] sm:text-2xl">
+                {biddingPackage.packageName}
+              </h2>
+              <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-[var(--color-text-muted)] sm:text-sm">
+                <BuildingOffice2Icon className="size-4 shrink-0" />
+                {projectName}
+                {project?.projectCode && <span>· {project.projectCode}</span>}
               </p>
             </div>
-            {canReceiveSubmissions && canSubmitBid && (
-              <button
-                type="button"
-                onClick={() => setShowSubmissionForm((visible) => !visible)}
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
-              >
-                <PlusIcon className="size-4" />
-                {showSubmissionForm ? 'Đóng form' : 'Thêm hồ sơ dự thầu'}
-              </button>
-            )}
           </div>
-
-          {showSubmissionForm && canReceiveSubmissions && (
-            <BidSubmissionForm
-              packageId={biddingPackage.id}
-              onClose={() => setShowSubmissionForm(false)}
-            />
-          )}
-
-          <BidComparisonTable 
-            packageId={biddingPackage.id} 
-            budget={biddingPackage.budget} 
-            criteria={biddingPackage.criteria}
-            onAddSubmission={() => setShowSubmissionForm(true)}
-            canManage={canManageBidding}
-          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-xl p-2 text-[var(--color-text-muted)] transition hover:bg-rose-50 hover:text-rose-600"
+            aria-label="Đóng chi tiết gói thầu"
+            title="Đóng (Esc)"
+          >
+            <XMarkIcon className="size-6" />
+          </button>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="p-6 border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]/50 flex justify-end gap-3">
-        <button 
+        <div className="px-4 pb-4 sm:px-6">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 sm:p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Tiến trình gói thầu</p>
+              <span className="text-xs font-semibold text-[var(--color-primary)]">Bước {workflowIndex + 1}/4</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {WORKFLOW_STEPS.map((step, index) => {
+                const isCurrent = index === workflowIndex;
+                const isCompleted = index < workflowIndex;
+                return (
+                  <div
+                    key={step.label}
+                    className={`rounded-lg border px-3 py-2.5 ${isCurrent ? 'border-blue-300 bg-blue-50' : 'border-transparent bg-[var(--color-surface)]'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${isCompleted ? 'bg-emerald-100 text-emerald-700' : isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        {isCompleted ? <CheckCircleIcon className="size-3.5" /> : index + 1}
+                      </span>
+                      <span className={`text-xs font-bold ${isCurrent ? 'text-blue-700' : 'text-[var(--color-text-secondary)]'}`}>{step.label}</span>
+                    </div>
+                    <p className="mt-1 pl-7 text-[11px] text-[var(--color-text-muted)]">{step.description}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-bg)] p-4 sm:p-6">
+        <div className="mx-auto max-w-6xl space-y-5">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <SummaryCard icon={CurrencyDollarIcon} label="Ngân sách dự toán" value={biddingPackage.budget ? formatCurrency(biddingPackage.budget) : 'Chưa xác định'} tone="info" />
+            <SummaryCard icon={CalendarDaysIcon} label="Hạn nộp hồ sơ" value={formatDate(biddingPackage.deadline)} tone="danger" />
+            <SummaryCard icon={BuildingOffice2Icon} label="Dự án áp dụng" value={projectName} detail={project?.projectCode || `Mã hệ thống #${biddingPackage.projectId}`} tone="warning" />
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <InfoSection title="Mô tả chi tiết" accent="blue">
+              <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
+                {biddingPackage.description || 'Chưa có mô tả chi tiết cho gói thầu này.'}
+              </p>
+            </InfoSection>
+
+            <InfoSection title="Tiêu chí lựa chọn" accent="emerald" trailing={criteria.length ? `${criteria.reduce((sum, item) => sum + item.weight, 0)}% tổng trọng số` : undefined}>
+              {criteria.length > 0 ? (
+                <div className="space-y-3">
+                  {criteria.map((criterion) => (
+                    <div key={criterion.name}>
+                      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                        <span className="font-semibold text-[var(--color-text-secondary)]">{criterion.name}</span>
+                        <span className="font-bold text-[var(--color-primary)]">{criterion.weight}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, Math.max(0, criterion.weight))}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--color-text-muted)]">Chưa định nghĩa tiêu chí cụ thể.</p>
+              )}
+            </InfoSection>
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-theme)]">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ScaleIcon className="size-5 text-[var(--color-primary)]" />
+                    <h3 className="text-base font-bold text-[var(--color-text-primary)]">Hồ sơ dự thầu & đánh giá</h3>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--color-text-muted)]">
+                    So sánh báo giá với ngân sách, kiểm tra hồ sơ năng lực và ghi nhận quyết định lựa chọn minh bạch.
+                  </p>
+                </div>
+                {canReceiveSubmissions && canSubmitBid && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSubmissionForm((visible) => !visible)}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--color-primary-hover)]"
+                  >
+                    {showSubmissionForm ? <XMarkIcon className="size-4" /> : <PlusIcon className="size-4" />}
+                    {showSubmissionForm ? 'Đóng biểu mẫu' : 'Thêm hồ sơ dự thầu'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {showSubmissionForm && canReceiveSubmissions && (
+              <div className="border-b border-[var(--color-border)] bg-blue-50/40 p-4 sm:p-5">
+                <BidSubmissionForm packageId={biddingPackage.id} onClose={() => setShowSubmissionForm(false)} />
+              </div>
+            )}
+
+            <div className="p-4 sm:p-5">
+              <BidComparisonTable
+                packageId={biddingPackage.id}
+                budget={biddingPackage.budget}
+                criteria={biddingPackage.criteria}
+                onAddSubmission={() => setShowSubmissionForm(true)}
+                canManage={canManageBidding}
+              />
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 sm:px-6">
+        <div className="hidden items-center gap-2 text-xs text-[var(--color-text-muted)] sm:flex">
+          <InformationCircleIcon className="size-4" />
+          Dùng phím Esc để đóng cửa sổ chi tiết
+        </div>
+        <button
+          type="button"
           onClick={onClose}
-          className="px-6 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] font-bold text-sm hover:bg-[var(--color-surface-alt)] transition-all cursor-pointer active:scale-95"
+          className="ml-auto inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-semibold text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-alt)]"
         >
           Đóng
+          <ArrowRightIcon className="size-4 rotate-180" />
         </button>
+      </footer>
+    </div>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: typeof CurrencyDollarIcon;
+  label: string;
+  value: string;
+  detail?: string;
+  tone: 'info' | 'danger' | 'warning';
+}) {
+  const toneClass = tone === 'info' ? 'bg-sky-50 text-sky-600' : tone === 'danger' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600';
+
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card-theme)]">
+      <div className={`shrink-0 rounded-xl p-2.5 ${toneClass}`}><Icon className="size-5" /></div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-[var(--color-text-muted)]">{label}</p>
+        <p className="mt-1 truncate text-base font-extrabold text-[var(--color-text-primary)]" title={value}>{value}</p>
+        {detail && <p className="mt-1 truncate text-xs text-[var(--color-text-muted)]">{detail}</p>}
       </div>
     </div>
   );
+}
+
+function InfoSection({
+  title,
+  accent,
+  trailing,
+  children,
+}: {
+  title: string;
+  accent: 'blue' | 'emerald';
+  trailing?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-card-theme)] sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-primary)]">
+          <span className={`h-5 w-1 rounded-full ${accent === 'blue' ? 'bg-blue-600' : 'bg-emerald-500'}`} />
+          {title}
+        </h3>
+        {trailing && <span className="text-xs font-semibold text-[var(--color-text-muted)]">{trailing}</span>}
+      </div>
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-4">{children}</div>
+    </section>
+  );
+}
+
+function StatusBadge({ status }: { status: BiddingStatus }) {
+  const meta = STATUS_META[status] || STATUS_META.DRAFT;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold ${meta.className}`}>
+      <span className={`size-1.5 rounded-full ${meta.dotClass}`} aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
+}
+
+function parseCriteria(criteria?: string): Criterion[] {
+  if (!criteria) return [];
+
+  try {
+    const parsed = JSON.parse(criteria);
+    return Array.isArray(parsed)
+      ? parsed
+        .filter((item) => Boolean(item?.name) && Number.isFinite(Number(item?.weight)))
+        .map((item) => ({ name: String(item.name), weight: Number(item.weight) }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function getWorkflowIndex(status: BiddingStatus) {
+  if (status === 'DRAFT' || status === 'PENDING') return 0;
+  if (OPEN_STATUSES.includes(status)) return 1;
+  if (status === 'EVALUATING') return 2;
+  return 3;
 }

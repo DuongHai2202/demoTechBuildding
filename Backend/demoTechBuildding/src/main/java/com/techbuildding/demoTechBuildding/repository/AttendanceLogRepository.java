@@ -44,6 +44,11 @@ public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, Lo
 
     List<AttendanceLog> findByCheckInAtBetweenOrderByCheckInAtDesc(LocalDateTime start, LocalDateTime end);
 
+    /** Open records include legacy check-ins created before shift snapshots existed. */
+    @Query("select a from AttendanceLog a where a.status = :status "
+            + "and a.checkOutAt is null order by a.checkInAt asc")
+    List<AttendanceLog> findOpenAttendanceLogs(@Param("status") String status);
+
     // Tìm toàn bộ log của user tại project trong khoảng thời gian
     List<AttendanceLog> findByUserIdAndProjectIdAndCheckInAtBetween(Long userId, Integer projectId, LocalDateTime start, LocalDateTime end);
 

@@ -45,7 +45,9 @@ public class ShiftServiceImpl implements ShiftService {
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final Set<String> ACTIVE_STATUSES = Set.of("ASSIGNED");
-    private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED");
+    // A missed checkout is finalized as ABSENT and must consume the assigned
+    // shift just like a completed attendance record.
+    private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED", "ABSENT");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Pattern CODE_PATTERN = Pattern.compile("[A-Z0-9][A-Z0-9_-]{1,49}");
     private static final LocalTime ADMIN_MORNING_START = LocalTime.of(8, 0);
