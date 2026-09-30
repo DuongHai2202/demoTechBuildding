@@ -39,6 +39,10 @@ services:
   # OTPs, refresh tokens and short-lived sessions are stored here.
   - type: keyvalue
     name: techbuilding-redis
+    # Redis is used only over Render's private network. An empty allow-list
+    # intentionally blocks public/external connections while allowing the API
+    # service in the same region to connect internally.
+    ipAllowList: []
     plan: free
     region: singapore
 
