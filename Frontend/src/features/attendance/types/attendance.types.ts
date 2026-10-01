@@ -40,6 +40,11 @@ export interface Attendance {
   workingHours: number | null;
   durationText: string | null;
   remarks: string | null;
+  correctionReason?: string | null;
+  correctedBy?: string | null;
+  correctedAt?: string | null;
+  /** Server/demo time used when calculating a live open record. */
+  effectiveTime?: string | null;
 }
 
 export interface CheckInRequest {
@@ -59,4 +64,33 @@ export interface OvertimeReviewRequest {
   status: 'APPROVED' | 'REJECTED';
   approvedMinutes: number;
   note?: string;
+}
+
+export interface AttendanceCorrectionRequest {
+  status: 'COMPLETED' | 'ABSENT';
+  checkInAt?: string;
+  checkOutAt?: string;
+  reason: string;
+}
+
+export interface AttendanceDemoClock {
+  featureEnabled: boolean;
+  enabled: boolean;
+  actualTime: string;
+  effectiveTime: string;
+  demoTime: string | null;
+  updatedAt: string | null;
+  expiresAt: string | null;
+  updatedBy: string | null;
+  message: string;
+}
+
+export interface AttendanceDemoClockRequest {
+  demoTime: string;
+  enabled: boolean;
+}
+
+export interface AttendanceEffectiveClock {
+  effectiveTime: string;
+  businessDate: string;
 }

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ShiftServiceImplTest {
 
-    private final ShiftServiceImpl service = new ShiftServiceImpl(null, null, null, null, null, null, null);
+    private final ShiftServiceImpl service = new ShiftServiceImpl(null, null, null, null, null, null, null, null);
     private final LocalDate workDate = LocalDate.of(2026, 9, 29);
 
     @Test
@@ -43,6 +43,15 @@ class ShiftServiceImplTest {
         assertEquals(0, service.overtimeMinutes(assignment, LocalDateTime.of(workDate, LocalTime.of(17, 30))));
         assertEquals(60, service.overtimeMinutes(assignment, LocalDateTime.of(workDate, LocalTime.of(18, 15))));
         assertEquals(210, service.overtimeMinutes(assignment, LocalDateTime.of(workDate, LocalTime.of(21, 30))));
+    }
+
+    @Test
+    void onlyFullDayShiftGetsTheExtendedCheckoutCutoff() {
+        ShiftAssignment fullDay = assignment("CA-HC", LocalTime.of(8, 0), LocalTime.of(17, 30), false, true);
+        ShiftAssignment afternoon = assignment("CA-CHIEU", LocalTime.of(13, 0), LocalTime.of(17, 30), false, true);
+
+        assertEquals(LocalDateTime.of(workDate, LocalTime.of(21, 0)), service.missedCheckoutCutoffAt(fullDay));
+        assertEquals(LocalDateTime.of(workDate, LocalTime.of(17, 30)), service.missedCheckoutCutoffAt(afternoon));
     }
 
     @Test

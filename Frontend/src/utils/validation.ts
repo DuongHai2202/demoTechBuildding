@@ -18,7 +18,7 @@ export const requiredDate = (message = 'Vui lòng chọn ngày') =>
   z.string().regex(DATE_PATTERN, message);
 
 export const optionalDate = () => z.string().trim().optional().refine(
-  (value) => !value || DATE_PATTERN.test(value),
+  (value) => !value || (DATE_PATTERN.test(value) && isValidDateValue(value)),
   'Ngày không đúng định dạng YYYY-MM-DD'
 );
 
@@ -42,6 +42,14 @@ export const optionalNumber = (message: string, min?: number, max?: number) =>
 
 export const isValidDateValue = (value: string | undefined) => {
   if (!value || !DATE_PATTERN.test(value)) return false;
-  const date = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+
+  // Validate calendar dates in UTC components instead of converting local
+  // midnight with toISOString(). In UTC+7, local `00:00` becomes the previous
+  // UTC date and valid dates such as 2026-10-29 were incorrectly rejected.
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
 };

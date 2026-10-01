@@ -2,11 +2,13 @@ package com.techbuildding.demoTechBuildding.service.impl;
 
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckInRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.AttendanceCorrectionRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
 import com.techbuildding.demoTechBuildding.dto.response.shift.ShiftAssignmentResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.AttendanceLog;
+import com.techbuildding.demoTechBuildding.entity.AttendanceCorrectionAudit;
 import com.techbuildding.demoTechBuildding.entity.Project;
 import com.techbuildding.demoTechBuildding.entity.ShiftAssignment;
 import com.techbuildding.demoTechBuildding.entity.ShiftTemplate;
@@ -14,6 +16,7 @@ import com.techbuildding.demoTechBuildding.entity.User;
 import com.techbuildding.demoTechBuildding.exception.BadRequestException;
 import com.techbuildding.demoTechBuildding.mapper.AttendanceMapper;
 import com.techbuildding.demoTechBuildding.repository.AttendanceLogRepository;
+import com.techbuildding.demoTechBuildding.repository.AttendanceCorrectionAuditRepository;
 import com.techbuildding.demoTechBuildding.repository.ProjectMemberRepository;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.repository.UserRepository;
@@ -35,7 +38,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Duration;
-import java.time.ZoneId;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.ArrayList;
@@ -63,8 +65,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AttendanceServiceImpl implements AttendanceService {
 
-    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final double MAX_GPS_ACCURACY_METERS = 150.0;
+    private static final long MAX_SELFIE_BYTES = 5L * 1024L * 1024L;
+    private static final long MAX_HISTORY_RANGE_DAYS = 366L;
     private static final Duration MAX_ATTENDANCE_SESSION = Duration.ofHours(24);
     /** Terminal states that consume the assigned shift and prevent re-check-in. */
     private static final Set<String> COMPLETED_STATUSES = Set.of("COMPLETED", "ABSENT");
@@ -79,12 +82,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final String OVERTIME_REJECTED = "REJECTED";
 
     private final AttendanceLogRepository attendanceLogRepository;
+    private final AttendanceCorrectionAuditRepository attendanceCorrectionAuditRepository;
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final AttendanceMapper attendanceMapper;
     private final StorageService storageService;
     private final ShiftService shiftService;
+    private final AttendanceDemoClockService attendanceDemoClockService;
 
     @Override
     @Transactional
@@ -94,6 +99,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         validateCoordinates(request.getLatitude(), request.getLongitude(), request.getAccuracy());
         validateUserPermission(userId);
         validateProjectMembership(userId, request.getProjectId());
+        validateSelfie(selfie, isManager(), "check-in");
 
         LocalDateTime checkInAt = now();
         boolean manager = isManager();
@@ -123,6 +129,11 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         User user = findUserOrThrow(userId);
         Project project = findProjectOrThrow(request.getProjectId());
+
+        // Lock the account row before checking for an active attendance log.
+        // Locking only an empty attendance query does not protect the insert
+        // gap when two check-in requests arrive at the same time.
+        User lockedUser = userRepository.findByIdForUpdate(userId).orElse(user);
 
         // Validate geofencing on the server. The browser check is only a UX hint.
         float distance = (float) validateGeofencing(
@@ -154,7 +165,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         AttendanceLog attendanceLog = AttendanceLog.builder()
-                .user(user)
+                .user(lockedUser)
                 .project(project)
                 .shiftAssignment(shiftAssignment)
                 .checkInAt(checkInAt)
@@ -188,7 +199,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("Check-in successful: userId={}, projectId={}, distance={}m", userId, request.getProjectId(),
                 distance);
 
-        return attendanceMapper.toResponseDTO(saved);
+        return toResponse(saved);
     }
 
     @Override
@@ -200,8 +211,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         validateCoordinates(request.getLatitude(), request.getLongitude(), request.getAccuracy());
         validateUserPermission(userId);
         validateProjectMembership(userId, projectId);
+        validateSelfie(selfie, isManager(), "check-out");
 
         Project project = findProjectOrThrow(projectId);
+
+        // Serialize checkout with a concurrent check-in for the same account.
+        userRepository.findByIdForUpdate(userId).orElseThrow(
+                () -> new BadRequestException("Không tìm thấy tài khoản chấm công."));
 
         LocalDateTime checkOutAt = now();
         Optional<AttendanceLog> activeBeforeFinalization = attendanceLogRepository
@@ -270,7 +286,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceLog updated = attendanceLogRepository.save(activeLog);
         log.info("Check-out successful: userId={}, projectId={}", userId, projectId);
 
-        return attendanceMapper.toResponseDTO(updated);
+        return toResponse(updated);
     }
 
     @Override
@@ -327,7 +343,128 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceLog saved = attendanceLogRepository.save(attendanceLog);
         log.info("Overtime reviewed: attendanceId={}, status={}, calculatedMinutes={}, approvedMinutes={}, reviewer={}",
                 attendanceId, reviewStatus, calculatedMinutes, approvedMinutes, reviewer.getUsername());
-        return attendanceMapper.toResponseDTO(saved);
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public AttendanceResponseDTO correctAttendance(Long attendanceId, AttendanceCorrectionRequestDTO request) {
+        if (!isManager()) {
+            throw new AccessDeniedException("Chỉ quản trị viên hoặc quản lý dự án được điều chỉnh chấm công.");
+        }
+
+        AttendanceLog attendanceLog = attendanceLogRepository.findById(attendanceId)
+                .orElseThrow(() -> new BadRequestException("Không tìm thấy lượt chấm công cần điều chỉnh."));
+        if (attendanceLog.getProject() == null || attendanceLog.getProject().getId() == null) {
+            throw new BadRequestException("Lượt chấm công chưa gắn với dự án hợp lệ.");
+        }
+        validateProjectAccess(attendanceLog.getProject().getId());
+
+        String targetStatus = trimToNull(request.getStatus());
+        String reason = trimToNull(request.getReason());
+        if (targetStatus == null || reason == null) {
+            throw new BadRequestException("Trạng thái và lý do điều chỉnh là bắt buộc.");
+        }
+        targetStatus = targetStatus.toUpperCase();
+        if (!Set.of("COMPLETED", ABSENT_STATUS).contains(targetStatus)) {
+            throw new BadRequestException("Chỉ được điều chỉnh lượt chấm công về Hoàn thành hoặc Vắng.");
+        }
+        if ("FAILED".equalsIgnoreCase(attendanceLog.getStatus())) {
+            throw new BadRequestException("Không thể sửa lượt xác thực thất bại. Hãy tạo lượt chấm công hợp lệ sau khi phân ca.");
+        }
+
+        User reviewer = currentUser();
+        String previousStatus = attendanceLog.getStatus();
+        LocalDateTime previousCheckInAt = attendanceLog.getCheckInAt();
+        LocalDateTime previousCheckOutAt = attendanceLog.getCheckOutAt();
+        if ("COMPLETED".equals(targetStatus)) {
+            LocalDateTime checkInAt = request.getCheckInAt() != null
+                    ? request.getCheckInAt() : attendanceLog.getCheckInAt();
+            LocalDateTime checkOutAt = request.getCheckOutAt();
+
+            if (checkInAt == null || checkOutAt == null) {
+                throw new BadRequestException(
+                        "Khi điều chỉnh thành Hoàn thành phải có đủ thời điểm vào và thời điểm ra.");
+            }
+            if (!checkOutAt.isAfter(checkInAt)) {
+                throw new BadRequestException("Thời điểm checkout phải sau thời điểm check-in.");
+            }
+            if (checkOutAt.isAfter(now())) {
+                throw new BadRequestException("Không thể điều chỉnh thời điểm checkout ở tương lai so với giờ hệ thống.");
+            }
+            if (Duration.between(checkInAt, checkOutAt).compareTo(MAX_ATTENDANCE_SESSION) > 0) {
+                throw new BadRequestException("Khoảng thời gian điều chỉnh không được vượt quá 24 giờ.");
+            }
+            if (attendanceLog.getShiftAssignment() != null
+                    && !attendanceLog.getShiftAssignment().getWorkDate().equals(checkInAt.toLocalDate())) {
+                throw new BadRequestException("Ngày check-in phải trùng ngày làm việc của phân ca.");
+            }
+
+            attendanceLog.setCheckInAt(checkInAt);
+            attendanceLog.setCheckOutAt(checkOutAt);
+            attendanceLog.setStatus("COMPLETED");
+            applyScheduleSnapshot(attendanceLog);
+
+            if (attendanceLog.getShiftAssignment() != null) {
+                attendanceLog.setLateMinutes(
+                        shiftService.lateMinutes(attendanceLog.getShiftAssignment(), checkInAt));
+                attendanceLog.setEarlyLeaveMinutes(
+                        shiftService.earlyLeaveMinutes(attendanceLog.getShiftAssignment(), checkOutAt));
+                long overtimeMinutes = shiftService.overtimeMinutes(
+                        attendanceLog.getShiftAssignment(), checkOutAt);
+                if (overtimeMinutes > 0 && !qualifiesForAdministrativeOvertime(attendanceLog, checkOutAt)) {
+                    overtimeMinutes = 0;
+                }
+                attendanceLog.setOvertimeMinutes(overtimeMinutes);
+                attendanceLog.setOvertimeStatus(overtimeMinutes > 0 ? OVERTIME_PENDING : OVERTIME_NONE);
+                attendanceLog.setOvertimeApprovedMinutes(0L);
+                attendanceLog.setOvertimeReviewedBy(null);
+                attendanceLog.setOvertimeReviewedAt(null);
+                attendanceLog.setOvertimeReviewNote(null);
+            } else {
+                attendanceLog.setLateMinutes(null);
+                attendanceLog.setEarlyLeaveMinutes(null);
+                attendanceLog.setOvertimeMinutes(0L);
+                attendanceLog.setOvertimeStatus(OVERTIME_NONE);
+                attendanceLog.setOvertimeApprovedMinutes(0L);
+            }
+        } else {
+            attendanceLog.setStatus(ABSENT_STATUS);
+            // A manually confirmed absence must not still display an old
+            // checkout time as if the employee completed the shift.
+            attendanceLog.setCheckOutAt(null);
+            attendanceLog.setOvertimeMinutes(0L);
+            attendanceLog.setOvertimeStatus(OVERTIME_NONE);
+            attendanceLog.setOvertimeApprovedMinutes(0L);
+            attendanceLog.setOvertimeReviewedBy(null);
+            attendanceLog.setOvertimeReviewedAt(null);
+            attendanceLog.setOvertimeReviewNote(null);
+            attendanceLog.setEarlyLeaveMinutes(null);
+        }
+
+        LocalDateTime correctedAt = now();
+        attendanceLog.setCorrectionReason(reason);
+        attendanceLog.setCorrectedBy(reviewer.getUsername());
+        attendanceLog.setCorrectedAt(correctedAt);
+        attendanceLog.setRemarks(appendRemark(attendanceLog.getRemarks(),
+                "Điều chỉnh thủ công bởi " + reviewer.getUsername() + ": " + reason));
+
+        AttendanceLog saved = attendanceLogRepository.save(attendanceLog);
+        attendanceCorrectionAuditRepository.save(AttendanceCorrectionAudit.builder()
+                .attendanceLog(saved)
+                .previousStatus(previousStatus)
+                .newStatus(saved.getStatus())
+                .previousCheckInAt(previousCheckInAt)
+                .previousCheckOutAt(previousCheckOutAt)
+                .newCheckInAt(saved.getCheckInAt())
+                .newCheckOutAt(saved.getCheckOutAt())
+                .reason(reason)
+                .correctedBy(reviewer.getUsername())
+                .correctedAt(correctedAt)
+                .build());
+        log.info("Attendance corrected: attendanceId={}, targetStatus={}, correctedBy={}, reasonLength={}",
+                attendanceId, targetStatus, reviewer.getUsername(), reason.length());
+        return toResponse(saved);
     }
 
     @Override
@@ -345,7 +482,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<AttendanceLog> logs = attendanceLogRepository
                 .findByUserIdAndCheckInAtBetweenOrderByCheckInAtDesc(userId, start, end);
 
-        return attendanceMapper.toResponseDTOList(logs);
+        return toResponseList(logs);
     }
 
     @Override
@@ -363,7 +500,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<AttendanceLog> logs = attendanceLogRepository
                 .findByProjectIdAndCheckInAtBetweenOrderByCheckInAtDesc(projectId, start, end);
 
-        return attendanceMapper.toResponseDTOList(logs);
+        return toResponseList(logs);
     }
 
     @Override
@@ -380,7 +517,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         Optional<AttendanceLog> active = attendanceLogRepository
                 .findActiveForUserAndProject(userId, projectId);
         if (active.isPresent()) {
-            return attendanceMapper.toResponseDTO(active.get());
+            return toResponse(active.get());
         }
 
         // If another uncompleted assignment is still available today, return
@@ -403,7 +540,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         userId, projectId, COMPLETED_STATUSES, startOfDay, endOfDay)
                 .stream()
                 .findFirst()
-                .map(attendanceMapper::toResponseDTO)
+                .map(this::toResponse)
                 .orElse(null);
     }
 
@@ -416,7 +553,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end = endDate.atTime(LocalTime.MAX);
         List<AttendanceLog> logs = attendanceLogRepository.findByCheckInAtBetweenOrderByCheckInAtDesc(start, end);
-        return attendanceMapper.toResponseDTOList(logs);
+        return toResponseList(logs);
     }
 
     @Override
@@ -444,6 +581,54 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .build();
 
         attendanceLogRepository.save(failLog);
+    }
+
+    private AttendanceResponseDTO toResponse(AttendanceLog log) {
+        AttendanceResponseDTO response = attendanceMapper.toResponseDTO(log);
+        if (log != null) {
+            // The service has already finalized overdue records using the
+            // server/demo clock. Do not let the mapper's wall clock override
+            // that authoritative state.
+            response.setStatus(log.getStatus());
+        }
+        response.setEffectiveTime(now());
+        return response;
+    }
+
+    private List<AttendanceResponseDTO> toResponseList(List<AttendanceLog> logs) {
+        return logs.stream().map(this::toResponse).toList();
+    }
+
+    private void applyScheduleSnapshot(AttendanceLog attendanceLog) {
+        if (attendanceLog.getShiftAssignment() == null) {
+            return;
+        }
+        if (attendanceLog.getScheduledStartAt() == null) {
+            attendanceLog.setScheduledStartAt(shiftService.scheduledStartAt(attendanceLog.getShiftAssignment()));
+        }
+        if (attendanceLog.getScheduledEndAt() == null) {
+            attendanceLog.setScheduledEndAt(shiftService.scheduledEndAt(attendanceLog.getShiftAssignment()));
+        }
+        if (attendanceLog.getBreakMinutes() == null) {
+            attendanceLog.setBreakMinutes(attendanceLog.getShiftAssignment().getShiftTemplate().getBreakMinutes());
+        }
+    }
+
+    private void validateSelfie(MultipartFile selfie, boolean manager, String action) {
+        if (manager && (selfie == null || selfie.isEmpty())) {
+            return;
+        }
+        if (selfie == null || selfie.isEmpty()) {
+            throw new BadRequestException("Không nhận được ảnh xác thực khuôn mặt khi " + action
+                    + ". Hãy hoàn tất chụp khuôn mặt rồi thử lại.");
+        }
+        if (selfie.getSize() <= 0 || selfie.getSize() > MAX_SELFIE_BYTES) {
+            throw new BadRequestException("Ảnh xác thực khuôn mặt không hợp lệ hoặc vượt quá 5 MB. Hãy chụp lại.");
+        }
+        String contentType = selfie.getContentType();
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            throw new BadRequestException("Tệp xác thực khuôn mặt phải là ảnh JPG, PNG hoặc định dạng ảnh được hỗ trợ.");
+        }
     }
 
     // ===== HELPERS =====
@@ -516,14 +701,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
             throw new BadRequestException("Khoảng thời gian không hợp lệ.");
         }
+        if (Duration.between(startDate.atStartOfDay(), endDate.plusDays(1).atStartOfDay()).toDays()
+                > MAX_HISTORY_RANGE_DAYS) {
+            throw new BadRequestException("Khoảng tra cứu chấm công không được vượt quá 366 ngày.");
+        }
     }
 
     private LocalDateTime now() {
-        return LocalDateTime.now(BUSINESS_ZONE);
+        return attendanceDemoClockService.now();
     }
 
     private LocalDate businessDate() {
-        return LocalDate.now(BUSINESS_ZONE);
+        return attendanceDemoClockService.today();
     }
 
     /** Keep exports, dashboards and reports correct even when nobody opens the
@@ -551,7 +740,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         List<AttendanceLog> changedLogs = new ArrayList<>();
-        for (AttendanceLog openLog : openLogs) {
+        for (AttendanceLog candidateLog : openLogs) {
+            AttendanceLog openLog = attendanceLogRepository.findByIdForUpdate(candidateLog.getId()).orElse(null);
+            if (openLog == null || !"CHECKED_IN".equals(openLog.getStatus()) || openLog.getCheckOutAt() != null) {
+                continue;
+            }
             boolean scheduleBackfilled = backfillLegacySchedule(openLog);
             if (isPastCheckoutCutoff(openLog, referenceTime)) {
                 markAsAbsent(openLog);
@@ -634,12 +827,19 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private String appendRemark(String currentRemark, String additionalRemark) {
         if (currentRemark == null || currentRemark.isBlank()) {
-            return additionalRemark;
+            return limitRemark(additionalRemark);
         }
         if (currentRemark.contains(additionalRemark)) {
-            return currentRemark;
+            return limitRemark(currentRemark);
         }
-        return currentRemark.trim() + " " + additionalRemark;
+        return limitRemark(currentRemark.trim() + " " + additionalRemark);
+    }
+
+    private String limitRemark(String value) {
+        if (value == null || value.length() <= 255) {
+            return value;
+        }
+        return value.substring(0, 255);
     }
 
     private User findUserOrThrow(Long userId) {

@@ -82,6 +82,10 @@ services:
     envVars:
       - key: APP_DEMO_AUTO_FILL_OTP
         value: "true"
+      # Keep the Admin-only demo clock disabled on the deployed environment.
+      # Enable it only in a temporary, protected demo deployment when needed.
+      - key: ATTENDANCE_DEMO_CLOCK_ENABLED
+        value: "false"
       - key: MYSQL_HOST
         fromService:
           name: techbuilding-mysql

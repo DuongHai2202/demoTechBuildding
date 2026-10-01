@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/axiosInstance';
 import type { ApiResponse } from '../../../types/api.types';
-import type { Attendance, CheckInRequest, CheckOutRequest, OvertimeReviewRequest } from '../types/attendance.types';
+import type {
+  Attendance,
+  AttendanceCorrectionRequest,
+  AttendanceDemoClock,
+  AttendanceDemoClockRequest,
+  AttendanceEffectiveClock,
+  CheckInRequest,
+  CheckOutRequest,
+  OvertimeReviewRequest,
+} from '../types/attendance.types';
 import type {
   FullDayShiftAssignmentRequest,
   ShiftAssignment,
@@ -11,6 +20,60 @@ import type {
 } from '../types/shift.types';
 
 const ATTENDANCE_KEY = ['attendance'] as const;
+
+// GET /api/v1/attendance/effective-clock
+export function useAttendanceEffectiveClock() {
+  return useQuery({
+    queryKey: [...ATTENDANCE_KEY, 'effective-clock'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<AttendanceEffectiveClock>>('/attendance/effective-clock');
+      return data.data;
+    },
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useAttendanceDemoClock(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...ATTENDANCE_KEY, 'demo-clock'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<AttendanceDemoClock>>('/attendance/demo-clock');
+      return data.data;
+    },
+    enabled: options?.enabled ?? true,
+    refetchInterval: options?.enabled === false ? false : 15_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useUpdateAttendanceDemoClock() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: AttendanceDemoClockRequest) => {
+      const { data } = await api.put<ApiResponse<AttendanceDemoClock>>('/attendance/demo-clock', payload);
+      return data.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...ATTENDANCE_KEY, 'demo-clock'], data);
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
+
+export function useResetAttendanceDemoClock() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.delete<ApiResponse<AttendanceDemoClock>>('/attendance/demo-clock');
+      return data.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...ATTENDANCE_KEY, 'demo-clock'], data);
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
 
 // POST /api/v1/attendance/check-in (Multipart)
 export function useCheckIn() {
@@ -145,6 +208,21 @@ export function useReviewOvertime() {
   return useMutation({
     mutationFn: async ({ attendanceId, request }: { attendanceId: number; request: OvertimeReviewRequest }) => {
       const { data } = await api.patch<ApiResponse<Attendance>>(`/attendance/${attendanceId}/overtime`, request);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_KEY });
+    },
+  });
+}
+
+// PATCH /api/v1/attendance/:id/correction
+export function useCorrectAttendance() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ attendanceId, request }: { attendanceId: number; request: AttendanceCorrectionRequest }) => {
+      const { data } = await api.patch<ApiResponse<Attendance>>(`/attendance/${attendanceId}/correction`, request);
       return data.data;
     },
     onSuccess: () => {

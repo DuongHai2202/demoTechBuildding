@@ -2,6 +2,7 @@ package com.techbuildding.demoTechBuildding.service;
 
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckInRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.AttendanceCorrectionRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
@@ -48,6 +49,9 @@ public interface AttendanceService {
 
     /** Finalize a calculated overtime amount. Only ADMIN/PM may review it. */
     AttendanceResponseDTO reviewOvertime(Long attendanceId, OvertimeReviewRequestDTO request);
+
+    /** Correct a finalized/missing attendance record with an auditable reason. */
+    AttendanceResponseDTO correctAttendance(Long attendanceId, AttendanceCorrectionRequestDTO request);
 
     /**
      * Log a failed attendance attempt (e.g. from frontend geofencing or face mismatch).

@@ -157,8 +157,7 @@ public interface AttendanceMapper {
         boolean administrativeOvertime = template.isOvertimeEligible()
                 && !template.isCrossesMidnight()
                 && LocalTime.of(17, 30).equals(template.getEndTime())
-                && (LocalTime.of(8, 0).equals(template.getStartTime())
-                || LocalTime.of(13, 0).equals(template.getStartTime()));
+                && LocalTime.of(8, 0).equals(template.getStartTime());
         return administrativeOvertime ? scheduledEnd.plusMinutes(210) : scheduledEnd;
     }
 }

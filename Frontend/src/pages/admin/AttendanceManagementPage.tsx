@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useProjects } from '../../features/projects/api/projectApi';
 import { AttendanceAdminList } from '../../features/attendance/components/AttendanceAdminList';
+import { AttendanceDemoClockPanel } from '../../features/attendance/components/AttendanceDemoClockPanel';
 import { 
   BuildingOffice2Icon, 
   ChevronRightIcon,
@@ -49,6 +50,8 @@ export default function AttendanceManagementPage() {
           Theo dõi nhật ký vào/ra và các lượt xác thực thất bại trên toàn hệ thống.
         </p>
       </div>
+
+      <AttendanceDemoClockPanel />
 
       {/* Project Selector or Empty State */}
       {!selectedProjectId ? (

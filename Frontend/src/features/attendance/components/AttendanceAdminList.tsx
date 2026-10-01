@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useProjectHistory, exportAttendanceExcel, useReviewOvertime } from '../api/attendanceApi';
+import { useProjectHistory, exportAttendanceExcel, useCorrectAttendance, useReviewOvertime } from '../api/attendanceApi';
 import {
   CalendarIcon,
   CheckCircleIcon,
@@ -10,6 +10,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/Button';
+import { AuthenticatedImage } from '../../../components/ui/AuthenticatedImage';
 import { Pagination } from '../../../components/ui/Pagination';
 import { formatDuration, getEffectiveAttendanceStatus, getLocalDateInputValue, getMinutesForAttendance } from '../utils/attendanceTime';
 import type { Attendance } from '../types/attendance.types';
@@ -48,6 +49,14 @@ function formatTime(value: string | null | undefined): string {
 
 function formatCoordinate(value: number | null | undefined): string {
   return value != null && Number.isFinite(value) ? value.toFixed(6) : '—';
+}
+
+function toDateTimeLocal(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function getStatusMeta(status: string) {
@@ -103,6 +112,11 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
   const [approvedOvertimeMinutes, setApprovedOvertimeMinutes] = useState(0);
   const [overtimeReviewNote, setOvertimeReviewNote] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [correctionStatus, setCorrectionStatus] = useState<'COMPLETED' | 'ABSENT'>('COMPLETED');
+  const [correctionCheckInAt, setCorrectionCheckInAt] = useState('');
+  const [correctionCheckOutAt, setCorrectionCheckOutAt] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctionError, setCorrectionError] = useState('');
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -118,6 +132,7 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
 
   const { data: logs, isLoading } = useProjectHistory(projectId, startDate, endDate);
   const reviewOvertime = useReviewOvertime();
+  const correctAttendance = useCorrectAttendance();
   const allLogs = logs || [];
   const isInvalidRange = startDate > endDate;
 
@@ -170,6 +185,11 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
     setApprovedOvertimeMinutes(selectedLog?.overtimeMinutes ?? 0);
     setOvertimeReviewNote('');
     setReviewError('');
+    setCorrectionStatus('COMPLETED');
+    setCorrectionCheckInAt(selectedLog && selectedLog.status !== 'ABSENT' ? toDateTimeLocal(selectedLog.checkInAt) : '');
+    setCorrectionCheckOutAt(selectedLog ? toDateTimeLocal(selectedLog.checkOutAt) : '');
+    setCorrectionReason('');
+    setCorrectionError('');
   }, [selectedLog?.id, selectedLog?.overtimeMinutes]);
 
   const handleOvertimeReview = (status: 'APPROVED' | 'REJECTED') => {
@@ -200,6 +220,35 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
         onError: (error) => {
           setReviewError(getApiErrorMessage(error, 'Không thể cập nhật duyệt tăng ca. Vui lòng thử lại.'));
         },
+      },
+    );
+  };
+
+  const handleCorrection = () => {
+    if (!selectedLog) return;
+    const reason = correctionReason.trim();
+    if (reason.length < 10) {
+      setCorrectionError('Lý do điều chỉnh phải có ít nhất 10 ký tự để lưu audit.');
+      return;
+    }
+    if (correctionStatus === 'COMPLETED' && (!correctionCheckInAt || !correctionCheckOutAt)) {
+      setCorrectionError('Điều chỉnh thành Hoàn thành phải có đủ thời điểm vào và ra.');
+      return;
+    }
+    setCorrectionError('');
+    correctAttendance.mutate(
+      {
+        attendanceId: selectedLog.id,
+        request: {
+          status: correctionStatus,
+          checkInAt: correctionStatus === 'COMPLETED' ? correctionCheckInAt : undefined,
+          checkOutAt: correctionStatus === 'COMPLETED' ? correctionCheckOutAt : undefined,
+          reason,
+        },
+      },
+      {
+        onSuccess: () => setSelectedLog(null),
+        onError: (error) => setCorrectionError(getApiErrorMessage(error, 'Không thể điều chỉnh lượt chấm công. Vui lòng thử lại.')),
       },
     );
   };
@@ -305,7 +354,7 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
                     <td className="px-4 py-3"><StatusText status={displayStatus} /></td>
                     <td className="px-4 py-3"><div className="space-y-1 text-xs"><p className="flex items-center gap-1.5 font-medium text-[var(--color-text-secondary)]"><MapPinIcon className="size-3.5 text-[var(--color-primary)]" />{log.distanceInMeters != null ? `${log.distanceInMeters.toFixed(1)}m từ tâm` : 'Chưa có khoảng cách'}</p>{log.gpsAccuracyIn != null && <p className="text-[var(--color-text-muted)]">GPS ±{log.gpsAccuracyIn.toFixed(0)}m</p>}</div></td>
                     <td className="max-w-[190px] px-4 py-3">{log.remarks ? <p className="border-l-2 border-[var(--color-danger)] pl-2 text-xs leading-5 text-[var(--color-danger)]">{log.remarks}</p> : log.status === 'COMPLETED' ? <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-success)]"><CheckCircleIcon className="size-4" />Hợp lệ</p> : <span className="text-xs text-[var(--color-text-disabled)]">Chưa có</span>}</td>
-                    <td className="px-4 py-3"><div className="flex items-start gap-3">{log.selfieUrlIn ? <a href={log.selfieUrlIn} target="_blank" rel="noreferrer" title="Ảnh vào" className="block"><img src={log.selfieUrlIn} alt="Ảnh check-in" className="size-9 rounded-lg border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-[10px] text-[var(--color-text-muted)]">Vào</span></a> : null}{log.selfieUrlOut ? <a href={log.selfieUrlOut} target="_blank" rel="noreferrer" title="Ảnh ra" className="block"><img src={log.selfieUrlOut} alt="Ảnh check-out" className="size-9 rounded-lg border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-[10px] text-[var(--color-text-muted)]">Ra</span></a> : null}{!log.selfieUrlIn && !log.selfieUrlOut && <PhotoIcon className="mt-1 size-5 text-[var(--color-text-disabled)]" />}</div></td>
+                    <td className="px-4 py-3"><div className="flex items-start gap-3">{log.selfieUrlIn ? <div className="block" title="Ảnh vào"><AuthenticatedImage fileUrl={log.selfieUrlIn} alt="Ảnh check-in" className="size-9 cursor-pointer rounded-lg border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-[10px] text-[var(--color-text-muted)]">Vào</span></div> : null}{log.selfieUrlOut ? <div className="block" title="Ảnh ra"><AuthenticatedImage fileUrl={log.selfieUrlOut} alt="Ảnh check-out" className="size-9 cursor-pointer rounded-lg border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-[10px] text-[var(--color-text-muted)]">Ra</span></div> : null}{!log.selfieUrlIn && !log.selfieUrlOut && <PhotoIcon className="mt-1 size-5 text-[var(--color-text-disabled)]" />}</div></td>
                     <td className="px-4 py-3 text-right"><button type="button" onClick={() => setSelectedLog(log)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-primary)] hover:underline"><EyeIcon className="size-4" />Xem</button></td>
                   </tr>
                 );
@@ -338,8 +387,33 @@ export function AttendanceAdminList({ projectId }: AttendanceAdminListProps) {
                 )}
                 {selectedLog.overtimeReviewNote && <p className="mt-3 border-l-2 border-[var(--color-warning)] pl-3 text-sm leading-6 text-[var(--color-text-secondary)]">{selectedLog.overtimeReviewNote}</p>}
               </section>
+              {getEffectiveAttendanceStatus(selectedLog) !== 'FAILED' && (
+                <section className="border-t border-[var(--color-border)] pt-5">
+                  <h3 className="mb-1 text-sm font-bold text-[var(--color-text-primary)]">Điều chỉnh chấm công</h3>
+                  <p className="text-xs leading-5 text-[var(--color-text-muted)]">Chỉ dùng khi đã xác minh với hiện trường. Mọi thay đổi đều lưu người sửa, thời điểm và lý do.</p>
+                  <div className="mt-4 space-y-3">
+                    <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">
+                      Kết quả sau điều chỉnh
+                      <select value={correctionStatus} onChange={(event) => setCorrectionStatus(event.target.value as 'COMPLETED' | 'ABSENT')} className="mt-1 h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-semibold text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]">
+                        <option value="COMPLETED">Hoàn thành / ghi nhận công</option>
+                        <option value="ABSENT">Vắng / không tính công</option>
+                      </select>
+                    </label>
+                    {correctionStatus === 'COMPLETED' && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">Giờ vào<input type="datetime-local" value={correctionCheckInAt} onChange={(event) => setCorrectionCheckInAt(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" /></label>
+                        <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">Giờ ra<input type="datetime-local" value={correctionCheckOutAt} onChange={(event) => setCorrectionCheckOutAt(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" /></label>
+                      </div>
+                    )}
+                    <label className="block text-xs font-semibold text-[var(--color-text-secondary)]">Lý do bắt buộc<textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} maxLength={500} rows={3} placeholder="Ví dụ: Đã đối chiếu camera và xác nhận nhân sự có mặt..." className="mt-1 w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-medium text-[var(--color-text-primary)] outline-none focus:border-[var(--color-primary)]" /></label>
+                    {correctionError && <p className="text-xs font-semibold text-[var(--color-danger)]">{correctionError}</p>}
+                    <div className="flex justify-end"><Button onClick={handleCorrection} disabled={correctAttendance.isPending}>{correctAttendance.isPending ? 'Đang lưu...' : 'Lưu điều chỉnh'}</Button></div>
+                  </div>
+                  {selectedLog.correctedAt && <p className="mt-3 border-l-2 border-[var(--color-info)] pl-3 text-xs leading-5 text-[var(--color-text-muted)]">Đã điều chỉnh bởi {selectedLog.correctedBy || '—'} lúc {formatDateTime(selectedLog.correctedAt)}: {selectedLog.correctionReason || '—'}</p>}
+                </section>
+              )}
               <section className="border-t border-[var(--color-border)] pt-5"><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Vị trí và xác thực</h3><dl className="grid gap-3 sm:grid-cols-2"><DetailField label="Tọa độ vào" value={`${formatCoordinate(selectedLog.gpsLatIn)}, ${formatCoordinate(selectedLog.gpsLongIn)}`} /><DetailField label="Tọa độ ra" value={`${formatCoordinate(selectedLog.gpsLatOut)}, ${formatCoordinate(selectedLog.gpsLongOut)}`} /><DetailField label="Khoảng cách vào" value={selectedLog.distanceInMeters != null ? `${selectedLog.distanceInMeters.toFixed(1)} m` : '—'} /><DetailField label="Khoảng cách ra" value={selectedLog.distanceOutMeters != null ? `${selectedLog.distanceOutMeters.toFixed(1)} m` : '—'} /><DetailField label="Sai số GPS vào" value={selectedLog.gpsAccuracyIn != null ? `±${selectedLog.gpsAccuracyIn.toFixed(1)} m` : '—'} /><DetailField label="Sai số GPS ra" value={selectedLog.gpsAccuracyOut != null ? `±${selectedLog.gpsAccuracyOut.toFixed(1)} m` : '—'} /></dl></section>
-              <section className="border-t border-[var(--color-border)] pt-5"><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Minh chứng</h3><div className="flex gap-4">{selectedLog.selfieUrlIn ? <a href={selectedLog.selfieUrlIn} target="_blank" rel="noreferrer" className="block"><img src={selectedLog.selfieUrlIn} alt="Ảnh xác thực vào" className="size-24 rounded-xl border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-xs text-[var(--color-text-muted)]">Ảnh vào</span></a> : <p className="text-sm text-[var(--color-text-muted)]">Không có ảnh vào</p>}{selectedLog.selfieUrlOut ? <a href={selectedLog.selfieUrlOut} target="_blank" rel="noreferrer" className="block"><img src={selectedLog.selfieUrlOut} alt="Ảnh xác thực ra" className="size-24 rounded-xl border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-xs text-[var(--color-text-muted)]">Ảnh ra</span></a> : null}</div></section>
+              <section className="border-t border-[var(--color-border)] pt-5"><h3 className="mb-3 text-sm font-bold text-[var(--color-text-primary)]">Minh chứng</h3><div className="flex gap-4">{selectedLog.selfieUrlIn ? <div className="block"><AuthenticatedImage fileUrl={selectedLog.selfieUrlIn} alt="Ảnh xác thực vào" className="size-24 cursor-pointer rounded-xl border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-xs text-[var(--color-text-muted)]">Ảnh vào</span></div> : <p className="text-sm text-[var(--color-text-muted)]">Không có ảnh vào</p>}{selectedLog.selfieUrlOut ? <div className="block"><AuthenticatedImage fileUrl={selectedLog.selfieUrlOut} alt="Ảnh xác thực ra" className="size-24 cursor-pointer rounded-xl border border-[var(--color-border)] object-cover" /><span className="mt-1 block text-center text-xs text-[var(--color-text-muted)]">Ảnh ra</span></div> : null}</div></section>
               <section className="border-t border-[var(--color-border)] pt-5"><h3 className="mb-2 text-sm font-bold text-[var(--color-text-primary)]">Ghi chú xử lý</h3>{selectedLog.remarks ? <p className="border-l-2 border-[var(--color-danger)] pl-3 text-sm leading-6 text-[var(--color-danger)]">{selectedLog.remarks}</p> : <p className="text-sm text-[var(--color-text-muted)]">Chưa có ghi chú hoặc lý do lỗi.</p>}</section>
             </div>
           </aside>

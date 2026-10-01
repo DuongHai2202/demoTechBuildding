@@ -17,6 +17,7 @@ import com.techbuildding.demoTechBuildding.repository.UserRepository;
 import com.techbuildding.demoTechBuildding.service.BiddingService;
 import com.techbuildding.demoTechBuildding.exception.DuplicateResourceException;
 import com.techbuildding.demoTechBuildding.exception.BadRequestException;
+import com.techbuildding.demoTechBuildding.exception.ResourceNotFoundException;
 import com.techbuildding.demoTechBuildding.util.code.StandardCodeGenerator;
 import com.techbuildding.demoTechBuildding.util.code.StandardCodeType;
 import lombok.RequiredArgsConstructor;
@@ -104,6 +105,17 @@ public class BiddingServiceImpl implements BiddingService {
         biddingPackage.setStatus(status);
         biddingPackage = packageRepository.save(biddingPackage);
         return mapToPackageResponse(biddingPackage);
+    }
+
+    @Override
+    @Transactional
+    public void deletePackage(Integer id) {
+        BiddingPackage biddingPackage = packageRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy gói thầu."));
+        if (submissionRepository.existsByBiddingPackageId(id)) {
+            throw new BadRequestException("Gói thầu đã có hồ sơ dự thầu, không thể xóa để bảo toàn lịch sử.");
+        }
+        packageRepository.delete(biddingPackage);
     }
 
     @Override

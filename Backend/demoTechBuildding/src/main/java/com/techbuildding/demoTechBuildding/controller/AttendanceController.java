@@ -2,13 +2,18 @@ package com.techbuildding.demoTechBuildding.controller;
 
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckInRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.CheckOutRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.AttendanceCorrectionRequestDTO;
+import com.techbuildding.demoTechBuildding.dto.request.attendance.AttendanceDemoClockRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.LogFailureRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.request.attendance.OvertimeReviewRequestDTO;
 import com.techbuildding.demoTechBuildding.dto.response.ResponseData;
+import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceDemoClockResponseDTO;
+import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceEffectiveClockResponseDTO;
 import com.techbuildding.demoTechBuildding.dto.response.attendance.AttendanceResponseDTO;
 import com.techbuildding.demoTechBuildding.entity.Project;
 import com.techbuildding.demoTechBuildding.repository.ProjectRepository;
 import com.techbuildding.demoTechBuildding.service.AttendanceService;
+import com.techbuildding.demoTechBuildding.service.impl.AttendanceDemoClockService;
 import com.techbuildding.demoTechBuildding.service.impl.ExcelExportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -22,6 +27,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -46,6 +52,7 @@ import java.util.List;
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
+    private final AttendanceDemoClockService attendanceDemoClockService;
     private final ExcelExportService excelExportService;
     private final ProjectRepository projectRepository;
 
@@ -79,6 +86,45 @@ public class AttendanceController {
         log.info("Check-out request: userId={}, projectId={}", userId, projectId);
         AttendanceResponseDTO result = attendanceService.checkOut(userId, projectId, request, selfie);
         return new ResponseData<>(HttpStatus.OK.value(), "Check-out successful", result);
+    }
+
+    // ==================== ADMIN DEMO CLOCK ====================
+
+    @Operation(summary = "Get attendance demo clock status",
+            description = "Admin-only status for the short-lived server-side clock override used during demonstrations.")
+    @GetMapping("/demo-clock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseData<AttendanceDemoClockResponseDTO> getDemoClock() {
+        return new ResponseData<>(HttpStatus.OK.value(), "Success", attendanceDemoClockService.getStatus());
+    }
+
+    @Operation(summary = "Set attendance demo clock",
+            description = "Admin-only. Changes the effective server time for attendance and shift rules in the demo environment.")
+    @PutMapping("/demo-clock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseData<AttendanceDemoClockResponseDTO> updateDemoClock(
+            @Valid @RequestBody AttendanceDemoClockRequestDTO request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã cập nhật đồng hồ demo",
+                attendanceDemoClockService.update(request, username));
+    }
+
+    @Operation(summary = "Reset attendance demo clock")
+    @DeleteMapping("/demo-clock")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseData<AttendanceDemoClockResponseDTO> resetDemoClock() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã tắt đồng hồ demo",
+                attendanceDemoClockService.reset(username));
+    }
+
+    @Operation(summary = "Get effective attendance clock",
+            description = "Returns the server/demo time used by shift eligibility and attendance rules.")
+    @GetMapping("/effective-clock")
+    public ResponseData<AttendanceEffectiveClockResponseDTO> getEffectiveClock() {
+        return new ResponseData<>(HttpStatus.OK.value(), "Success",
+                new AttendanceEffectiveClockResponseDTO(
+                        attendanceDemoClockService.now(), attendanceDemoClockService.today()));
     }
 
     // ==================== FAILURE LOGGING ====================
@@ -139,6 +185,20 @@ public class AttendanceController {
                 attendanceId, request.getStatus(), request.getApprovedMinutes());
         AttendanceResponseDTO result = attendanceService.reviewOvertime(attendanceId, request);
         return new ResponseData<>(HttpStatus.OK.value(), "Đã cập nhật xử lý tăng ca.", result);
+    }
+
+    @Operation(summary = "Điều chỉnh lượt chấm công",
+            description = "ADMIN/PM điều chỉnh COMPLETED hoặc ABSENT; bắt buộc nhập lý do để lưu audit.")
+    @PatchMapping("/{attendanceId}/correction")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PM')")
+    public ResponseData<AttendanceResponseDTO> correctAttendance(
+            @Parameter(description = "Attendance log ID") @PathVariable("attendanceId") Long attendanceId,
+            @Valid @RequestBody AttendanceCorrectionRequestDTO request) {
+
+        log.info("Attendance correction request: attendanceId={}, status={}",
+                attendanceId, request.getStatus());
+        AttendanceResponseDTO result = attendanceService.correctAttendance(attendanceId, request);
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã lưu điều chỉnh chấm công.", result);
     }
 
     @Operation(summary = "Get all attendance logs", description = "Get all attendance logs across all projects within a date range.")

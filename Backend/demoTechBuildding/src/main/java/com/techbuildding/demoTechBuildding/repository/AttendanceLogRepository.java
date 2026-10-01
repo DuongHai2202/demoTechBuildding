@@ -32,6 +32,11 @@ public interface AttendanceLogRepository extends JpaRepository<AttendanceLog, Lo
             + "and a.status = 'CHECKED_IN' and a.checkOutAt is null")
     Optional<AttendanceLog> findActiveForUpdate(@Param("userId") Long userId, @Param("projectId") Integer projectId);
 
+    /** Serialize scheduler finalization with a late checkout request. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from AttendanceLog a where a.id = :id")
+    Optional<AttendanceLog> findByIdForUpdate(@Param("id") Long id);
+
     List<AttendanceLog> findByUserIdAndProjectIdAndStatusAndCheckInAtBetweenOrderByCheckInAtDesc(
             Long userId, Integer projectId, String status, LocalDateTime start, LocalDateTime end);
 

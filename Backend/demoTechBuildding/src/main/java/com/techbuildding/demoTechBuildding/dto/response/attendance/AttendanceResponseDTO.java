@@ -67,4 +67,12 @@ public class AttendanceResponseDTO implements Serializable {
     private String durationText;
 
     private String remarks;
+
+    // Manual correction audit
+    private String correctionReason;
+    private String correctedBy;
+    private LocalDateTime correctedAt;
+
+    /** Effective server/demo time used to render an open attendance record. */
+    private LocalDateTime effectiveTime;
 }

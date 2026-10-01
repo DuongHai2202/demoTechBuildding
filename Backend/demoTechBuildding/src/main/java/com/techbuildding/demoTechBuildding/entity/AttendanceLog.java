@@ -105,4 +105,14 @@ public class AttendanceLog extends AbstractEntity<Long> {
 
     @Column(name = "remarks")
     private String remarks;
+
+    /** Audit fields for an explicit ADMIN/PM correction. */
+    @Column(name = "correction_reason", length = 500)
+    private String correctionReason;
+
+    @Column(name = "corrected_by", length = 50)
+    private String correctedBy;
+
+    @Column(name = "corrected_at")
+    private LocalDateTime correctedAt;
 }

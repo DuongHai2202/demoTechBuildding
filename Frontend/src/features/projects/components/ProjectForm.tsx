@@ -48,7 +48,13 @@ export function ProjectForm({ initialData, onSubmit, isLoading }: ProjectFormPro
   const radius = watch('radiusMeters');
 
   const onFormSubmit = (data: ProjectFormData) => {
-    onSubmit(data);
+    const payload: ProjectFormData = {
+      ...data,
+      projectCode: data.projectCode?.trim() || undefined,
+      description: data.description?.trim() || undefined,
+      endDate: data.endDate?.trim() || undefined,
+    };
+    onSubmit(payload);
   };
 
   return (

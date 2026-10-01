@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowRightStartOnRectangleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { useProjects } from '../../projects/api/projectApi';
-import { useCheckIn, useCheckOut, useTodayRecord, useLogFailure, useCurrentShift } from '../api/attendanceApi';
+import { useAttendanceEffectiveClock, useCheckIn, useCheckOut, useTodayRecord, useLogFailure, useCurrentShift } from '../api/attendanceApi';
 import { useGeolocation } from '../../../hooks/useGeolocation';
 import { useAuthStore } from '../../auth/stores/authStore';
 import { Button } from '../../../components/ui/Button';
@@ -31,6 +31,8 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
   
   // Daily Reset Logic: Force refresh check-in status when day changes
   const [currentDate, setCurrentDate] = useState(() => getLocalDateInputValue());
+  const { data: effectiveClock, isLoading: isClockLoading } = useAttendanceEffectiveClock();
+  const effectiveDate = effectiveClock?.businessDate || currentDate;
 
   useEffect(() => {
     // Check every minute if the day has changed
@@ -57,13 +59,13 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
   const { data: todayRecord, isLoading: isRecordLoading } = useTodayRecord(
     user?.id || 0,
     Number(selectedProjectId) || 0,
-    currentDate,
+    effectiveDate,
     { enabled: isSelectedProjectAccessible },
   );
   const { data: currentShift, isLoading: isShiftLoading } = useCurrentShift(
     user?.id || 0,
     Number(selectedProjectId) || 0,
-    currentDate,
+    effectiveDate,
     { enabled: isSelectedProjectAccessible },
   );
 
@@ -127,6 +129,10 @@ export function CheckInForm({ selectedProjectId, onProjectChange }: CheckInFormP
       && todayRecord.status !== 'ABSENT'
       && !todayRecord.checkOutAt;
     if (!isCheckingOutNow && !isManager) {
+      if (isClockLoading || !effectiveClock) {
+        setActionError('Đang đồng bộ thời gian máy chủ. Vui lòng chờ một chút rồi thử lại.');
+        return;
+      }
       if (isShiftLoading) {
         setActionError('Đang tải thông tin ca làm việc. Vui lòng chờ một chút rồi thử lại.');
         return;

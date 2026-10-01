@@ -33,7 +33,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,7 +46,6 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ShiftServiceImpl implements ShiftService {
 
-    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final Set<String> ACTIVE_STATUSES = Set.of("ASSIGNED");
     // A completed check-in or an absence consumes the assigned shift unless an
     // admin explicitly reopens an automatic missed-check-in absence.
@@ -60,6 +58,7 @@ public class ShiftServiceImpl implements ShiftService {
     private static final long MIN_OVERTIME_MINUTES = 60L;
     private static final long MAX_OVERTIME_MINUTES = 210L;
     private static final long MAX_LATE_CHECK_IN_MINUTES = 30L;
+    private static final long FINALIZE_LOOKBACK_DAYS = 31L;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final String LATE_ABSENCE_REMARK =
             "Tự động chốt vắng: quá 30 phút kể từ giờ bắt đầu ca nhưng chưa check-in.";
@@ -71,6 +70,7 @@ public class ShiftServiceImpl implements ShiftService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final AttendanceDemoClockService attendanceDemoClockService;
 
     @Override
     @Transactional(readOnly = true)
@@ -164,7 +164,7 @@ public class ShiftServiceImpl implements ShiftService {
                     .findByWorkDateBetweenAndStatusInOrderByWorkDateAscShiftTemplateStartTimeAsc(
                             from, to, ACTIVE_STATUSES);
         }
-        LocalDateTime currentTime = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime currentTime = attendanceDemoClockService.now();
         return assignments.stream().map(assignment -> toAssignmentResponse(assignment, currentTime)).toList();
     }
 
@@ -173,8 +173,8 @@ public class ShiftServiceImpl implements ShiftService {
     public ShiftAssignmentResponseDTO getCurrentAssignment(Long userId, Integer projectId, LocalDate date) {
         validateUserScope(userId);
         requireActiveMemberIfStaff(projectId, userId);
-        LocalDate effectiveDate = date == null ? LocalDate.now(BUSINESS_ZONE) : date;
-        LocalDateTime currentTime = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDate effectiveDate = date == null ? attendanceDemoClockService.today() : date;
+        LocalDateTime currentTime = attendanceDemoClockService.now();
         // Display data must remain available after a shift has been consumed
         // by COMPLETED/ABSENT. Check-in eligibility is filtered separately by
         // findCandidates(), so the UI never confuses an old shift with no shift.
@@ -224,7 +224,7 @@ public class ShiftServiceImpl implements ShiftService {
         if (template.getProject() != null && !template.getProject().getId().equals(project.getId())) {
             throw new BadRequestException("Mẫu ca không thuộc dự án được chọn.");
         }
-        if (request.getWorkDate().isBefore(LocalDate.now(BUSINESS_ZONE).minusDays(1))) {
+        if (request.getWorkDate().isBefore(attendanceDemoClockService.today().minusDays(1))) {
             throw new BadRequestException("Không thể phân ca cho ngày đã quá hạn.");
         }
         if (shiftAssignmentRepository.findByProjectIdAndUserIdAndShiftTemplateIdAndWorkDate(
@@ -254,7 +254,7 @@ public class ShiftServiceImpl implements ShiftService {
         log.info("Shift assigned: assignmentId={}, userId={}, projectId={}, workDate={}, shift={}",
                 saved.getId(), user.getId(), project.getId(), saved.getWorkDate(), template.getCode());
         notifyShiftAssigned(saved);
-        return toAssignmentResponse(saved, LocalDateTime.now(BUSINESS_ZONE));
+        return toAssignmentResponse(saved, attendanceDemoClockService.now());
     }
 
     @Override
@@ -275,7 +275,7 @@ public class ShiftServiceImpl implements ShiftService {
         if (!fullDayTemplate.isOvertimeEligible()) {
             throw new BadRequestException("Mẫu Full ca phải bật tính tăng ca sau 17:30.");
         }
-        if (request.getWorkDate().isBefore(LocalDate.now(BUSINESS_ZONE).minusDays(1))) {
+        if (request.getWorkDate().isBefore(attendanceDemoClockService.today().minusDays(1))) {
             throw new BadRequestException("Không thể phân ca cho ngày đã quá hạn.");
         }
 
@@ -307,7 +307,7 @@ public class ShiftServiceImpl implements ShiftService {
         log.info("Full-day shift assigned: assignmentId={}, userId={}, projectId={}, workDate={}, template={}",
                 saved.getId(), user.getId(), project.getId(), request.getWorkDate(), fullDayTemplate.getCode());
         notifyFullDayAssigned(user, project, request.getWorkDate(), fullDayTemplate);
-        return toAssignmentResponse(saved, LocalDateTime.now(BUSINESS_ZONE));
+        return toAssignmentResponse(saved, attendanceDemoClockService.now());
     }
 
     @Override
@@ -339,13 +339,13 @@ public class ShiftServiceImpl implements ShiftService {
         User approver = currentUser();
         assignment.setLateCheckInApproved(true);
         assignment.setLateCheckInApprovedBy(approver.getId());
-        assignment.setLateCheckInApprovedAt(LocalDateTime.now(BUSINESS_ZONE));
+        assignment.setLateCheckInApprovedAt(attendanceDemoClockService.now());
         assignment.setLateCheckInApprovalNote(trimToNull(reason));
         ShiftAssignment saved = shiftAssignmentRepository.save(assignment);
         log.info("Late check-in approved: assignmentId={}, userId={}, approvedBy={}, reason={}",
                 assignmentId, assignment.getUser().getId(), approver.getId(), trimToNull(reason));
         notifyLateCheckInApproved(saved);
-        return toAssignmentResponse(saved, LocalDateTime.now(BUSINESS_ZONE));
+        return toAssignmentResponse(saved, attendanceDemoClockService.now());
     }
 
     @Override
@@ -435,10 +435,18 @@ public class ShiftServiceImpl implements ShiftService {
         LocalDate effectiveDate = currentTime.toLocalDate();
         List<ShiftAssignment> assignments = shiftAssignmentRepository
                 .findByWorkDateBetweenAndStatusInOrderByWorkDateAscShiftTemplateStartTimeAsc(
-                        effectiveDate.minusDays(1), effectiveDate, ACTIVE_STATUSES);
+                        effectiveDate.minusDays(FINALIZE_LOOKBACK_DAYS), effectiveDate, ACTIVE_STATUSES);
         List<AttendanceLog> absences = new ArrayList<>();
 
-        for (ShiftAssignment assignment : assignments) {
+        for (ShiftAssignment candidate : assignments) {
+            // A scheduler tick and a read/check-in request can finalize the
+            // same assignment concurrently. Lock the assignment before the
+            // exists-check so only one transaction creates the ABSENT row.
+            ShiftAssignment assignment = shiftAssignmentRepository.findByIdForUpdate(candidate.getId())
+                    .orElse(null);
+            if (assignment == null) {
+                continue;
+            }
             if (assignment.isLateCheckInApproved()) {
                 continue;
             }
@@ -500,9 +508,11 @@ public class ShiftServiceImpl implements ShiftService {
         }
         LocalDateTime scheduledEnd = scheduledEndAt(assignment);
         ShiftTemplate template = assignment.getShiftTemplate();
+        // Only the continuous 08:00–17:30 administrative shift gets the
+        // overtime checkout window. A single morning/afternoon shift may be
+        // checked out normally, but it must not stay open until 21:00.
         if (template != null && template.isOvertimeEligible()
-                && isAdministrativeOvertimeShift(template.getStartTime(), template.getEndTime(),
-                template.isCrossesMidnight())) {
+                && isFullDayAdministrativeShift(template)) {
             return scheduledEnd.plusMinutes(MAX_OVERTIME_MINUTES);
         }
         return scheduledEnd;

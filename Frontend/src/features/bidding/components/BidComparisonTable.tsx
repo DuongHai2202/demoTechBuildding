@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '../../../services/apiError';
 import { CheckCircleIcon, ClockIcon, DocumentIcon, InformationCircleIcon, TrophyIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import { useBidSubmissions, useUpdateSubmissionStatus } from '../api/biddingApi';
 import { formatCurrency } from '../../../utils/formatCurrency';
@@ -79,6 +81,9 @@ export function BidComparisonTable({ packageId, budget, criteria: criteriaJson, 
         id: submission.id,
         status: 'ACCEPTED',
         notes: 'Được chọn làm nhà thầu trúng thầu sau khi đánh giá hồ sơ.',
+      }, {
+        onSuccess: () => toast.success('Đã chọn nhà thầu trúng thầu và hoàn tất gói thầu.'),
+        onError: (error) => toast.error(getApiErrorMessage(error)),
       });
     }
   };

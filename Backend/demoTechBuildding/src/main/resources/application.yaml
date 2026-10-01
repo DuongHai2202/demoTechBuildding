@@ -18,6 +18,11 @@ app:
 attendance:
   auto-finalize-fixed-delay-ms: ${ATTENDANCE_AUTO_FINALIZE_DELAY_MS:60000}
   auto-finalize-initial-delay-ms: ${ATTENDANCE_AUTO_FINALIZE_INITIAL_DELAY_MS:60000}
+  # Admin-only, short-lived server clock override for local/demo testing.
+  # Keep this false in production. Enable locally with
+  # ATTENDANCE_DEMO_CLOCK_ENABLED=true.
+  demo-clock:
+    enabled: ${ATTENDANCE_DEMO_CLOCK_ENABLED:false}
 
 spring:
   application:
