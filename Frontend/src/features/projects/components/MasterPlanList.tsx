@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useMasterPlan, useMyProjectPermission } from '../api/projectApi';
-import type { MasterPlanItem } from '../types/masterPlan.types';
+import { useMasterPlan, useMyProjectPermission, useUpdateMasterPlanProgress } from '../api/projectApi';
+import type { MasterPlanItem, MasterPlanStatus } from '../types/masterPlan.types';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '../../../services/apiError';
 import { 
   ChevronRightIcon, 
   ChevronDownIcon, 
@@ -97,6 +99,7 @@ export function MasterPlanList({ projectId }: MasterPlanListProps) {
               expandedItems={expandedItems} 
               toggleExpand={toggleExpand}
               projectId={projectId}
+              canManage={permissions.canManageSchedule}
             />
           ))}
           {itemList.length === 0 && (
@@ -124,9 +127,44 @@ interface RowProps {
   expandedItems: Set<number>;
   toggleExpand: (id: number) => void;
   projectId: number;
+  canManage: boolean;
 }
 
-function MasterPlanRow({ item, level, expandedItems, toggleExpand, projectId }: RowProps) {
+function MasterPlanRow({ item, level, expandedItems, toggleExpand, projectId, canManage }: RowProps) {
+  const updateProgress = useUpdateMasterPlanProgress(projectId);
+  const [editing, setEditing] = useState(false);
+  const [status, setStatus] = useState<MasterPlanStatus>(item.status);
+  const [progress, setProgress] = useState(String(item.progress));
+  const [error, setError] = useState('');
+
+  const startEditing = () => {
+    setStatus(item.status);
+    setProgress(String(item.progress));
+    setError('');
+    setEditing(true);
+  };
+
+  const saveProgress = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManage || updateProgress.isPending) return;
+    const value = Number(progress);
+    if (progress.trim() === '' || !Number.isInteger(value) || value < 0 || value > 100) {
+      setError('Tiến độ phải là số nguyên từ 0 đến 100.');
+      return;
+    }
+    if (value === 100 && status !== 'COMPLETED') {
+      setError('Với tiến độ 100%, vui lòng chọn trạng thái Hoàn thành.');
+      return;
+    }
+    setError('');
+    updateProgress.mutate({ planId: item.id, progress: value, status }, {
+      onSuccess: () => {
+        setEditing(false);
+        toast.success('Đã cập nhật trạng thái và tiến độ công việc.');
+      },
+      onError: (err) => setError(getApiErrorMessage(err)),
+    });
+  };
   const isExpanded = expandedItems.has(item.id);
   const hasChildren = item.children && item.children.length > 0;
 
@@ -189,13 +227,49 @@ function MasterPlanRow({ item, level, expandedItems, toggleExpand, projectId }: 
           </div>
         </div>
 
-        <div className="col-span-2 flex justify-end items-center gap-1.5">
+        <div className="col-span-2 flex flex-wrap justify-end items-center gap-1.5">
           <span className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-tighter">
             {getStatusLabel(item.status)}
           </span>
           {getStatusIcon(item.status)}
+          {canManage && (
+            <button type="button" onClick={startEditing} aria-label={`Cập nhật ${item.name}`} aria-expanded={editing} className="rounded-lg border border-[var(--color-border)] px-2 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-bg)]">
+              Cập nhật
+            </button>
+          )}
         </div>
       </div>
+
+      {editing && canManage && (
+        <form onSubmit={saveProgress} className="border-t border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+          <p className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">Cập nhật: {item.name}</p>
+          <fieldset disabled={updateProgress.isPending} className="flex flex-wrap items-end gap-3 disabled:opacity-60">
+            <label className="flex flex-col gap-1 text-sm text-[var(--color-text-secondary)]">
+              Trạng thái
+              <select value={status} onChange={(event) => {
+                const next = event.target.value as MasterPlanStatus;
+                setStatus(next);
+                setError('');
+                if (next === 'NOT_STARTED') setProgress('0');
+                else if (next === 'COMPLETED') setProgress('100');
+              }} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
+                <option value="NOT_STARTED">Chờ</option>
+                <option value="IN_PROGRESS">Đang chạy</option>
+                <option value="DELAYED">Trễ hạn</option>
+                <option value="COMPLETED">Hoàn thành</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-[var(--color-text-secondary)]">
+              Tiến độ (%)
+              <input type="number" min="0" max="100" step="1" required value={progress} readOnly={status === 'NOT_STARTED' || status === 'COMPLETED'} onChange={(event) => setProgress(event.target.value)} className="w-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 read-only:opacity-60" />
+            </label>
+            <button type="submit" className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white">{updateProgress.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+            <button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text-secondary)]">Hủy</button>
+          </fieldset>
+          <p className="mt-2 text-xs text-[var(--color-text-muted)]">Chờ tương ứng 0%; Hoàn thành tương ứng 100%. Đang chạy hoặc Trễ hạn cho phép nhập tiến độ thực tế.</p>
+          {error && <p role="alert" className="mt-2 text-sm text-[var(--color-danger)]">{error}</p>}
+        </form>
+      )}
       
       {isExpanded && hasChildren && (
         <div className="bg-[var(--color-bg)]/30">
@@ -207,6 +281,7 @@ function MasterPlanRow({ item, level, expandedItems, toggleExpand, projectId }: 
               expandedItems={expandedItems} 
               toggleExpand={toggleExpand}
               projectId={projectId}
+              canManage={canManage}
             />
           ))}
         </div>

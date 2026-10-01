@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PackageList } from './PackageList';
-import { PackageForm } from './PackageForm';
+import { PackageFormDialog } from './PackageFormDialog';
 import { BiddingPackageDetail } from './BiddingPackageDetail';
 import type { BiddingPackage } from '../types/bidding.types';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
@@ -49,7 +49,7 @@ export function BiddingModule({ projectId }: { projectId: number }) {
       )}
 
       {showForm && (
-        <PackageForm 
+        <PackageFormDialog 
           projectId={projectId} 
           onClose={() => setShowForm(false)} 
         />

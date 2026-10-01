@@ -66,6 +66,7 @@ export function useUpdateBiddingStatus() {
       return data.data;
     },
     onSuccess: (data) => {
+      queryClient.setQueryData(BIDDING_KEYS.packageDetail(data.id), data);
       queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.packageDetail(data.id) });
       queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.projectPackages(data.projectId) });
       queryClient.invalidateQueries({ queryKey: [...BIDDING_KEYS.all, 'list'] });
@@ -81,6 +82,19 @@ export function useBidSubmissions(packageId: number) {
       return data.data;
     },
     enabled: packageId > 0,
+  });
+}
+
+export function useDeleteBiddingPackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/bidding-packages/${id}`);
+    },
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: BIDDING_KEYS.packageDetail(id) });
+      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.all });
+    },
   });
 }
 
@@ -108,10 +122,8 @@ export function useUpdateSubmissionStatus() {
       });
       return data.data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.submissions(data.packageId) });
-      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.packageDetail(data.packageId) });
-      queryClient.invalidateQueries({ queryKey: [...BIDDING_KEYS.all, 'list'] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: BIDDING_KEYS.all });
     },
   });
 }

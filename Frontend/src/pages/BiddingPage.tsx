@@ -13,10 +13,14 @@ import {
   PlusIcon,
   ShieldCheckIcon,
   TicketIcon,
+  TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 
-import { useAllBiddingPackages } from '../features/bidding/api/biddingApi';
+import { useAllBiddingPackages, useDeleteBiddingPackage } from '../features/bidding/api/biddingApi';
+import { useActionDialog } from '../components/ui/ActionDialog';
+import { getApiErrorMessage } from '../services/apiError';
+import { toast } from 'sonner';
 import { useProjects } from '../features/projects/api/projectApi';
 import { BiddingPackageDetail } from '../features/bidding/components/BiddingPackageDetail';
 import { PackageForm } from '../features/bidding/components/PackageForm';
@@ -57,6 +61,25 @@ const BiddingPage: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<BiddingStatus | ''>('');
   const [viewingPackage, setViewingPackage] = useState<BiddingPackage | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const deletePackage = useDeleteBiddingPackage();
+  const { confirm } = useActionDialog();
+
+  const handleDelete = async (pkg: BiddingPackage) => {
+    if (!canManageBidding || deletePackage.isPending) return;
+    if (!await confirm({
+      title: 'Xóa gói thầu',
+      description: `Bạn muốn xóa gói thầu "${pkg.packageName}" (${pkg.packageCode || pkg.id})? Thao tác không thể hoàn tác. Gói đã có hồ sơ dự thầu sẽ không được xóa.`,
+      confirmLabel: 'Xóa gói thầu',
+      variant: 'danger',
+    })) return;
+    deletePackage.mutate(pkg.id, {
+      onSuccess: () => {
+        setViewingPackage((current) => current?.id === pkg.id ? null : current);
+        toast.success('Đã xóa gói thầu.');
+      },
+      onError: (error) => toast.error(getApiErrorMessage(error)),
+    });
+  };
 
   useEffect(() => {
     if (!viewingPackage) return undefined;
@@ -211,8 +234,9 @@ const BiddingPage: React.FC = () => {
       key: 'actions',
       header: 'Thao tác',
       align: 'right',
-      className: 'w-[150px]',
+      className: 'min-w-[220px]',
       render: (pkg) => (
+        <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={() => setViewingPackage(pkg)}
@@ -222,6 +246,12 @@ const BiddingPage: React.FC = () => {
           <InformationCircleIcon className="size-4" />
           Xem chi tiết
         </button>
+        {canManageBidding && (
+          <button type="button" onClick={(event) => { event.stopPropagation(); void handleDelete(pkg); }} disabled={deletePackage.isPending} aria-label={`Xóa gói thầu ${pkg.packageName}`} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+            <TrashIcon className="size-4" /> Xóa
+          </button>
+        )}
+        </div>
       ),
     },
   ];

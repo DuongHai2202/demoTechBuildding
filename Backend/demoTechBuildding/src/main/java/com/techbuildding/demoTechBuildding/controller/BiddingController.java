@@ -54,6 +54,13 @@ public class BiddingController {
         return new ResponseData<>(HttpStatus.OK.value(), "Status updated", biddingService.updatePackageStatus(id, status));
     }
 
+    @Operation(summary = "Delete a bidding package without submissions")
+    @DeleteMapping("/bidding-packages/{id}")
+    public ResponseData<Void> deletePackage(@PathVariable("id") Integer id) {
+        biddingService.deletePackage(id);
+        return new ResponseData<>(HttpStatus.OK.value(), "Đã xóa gói thầu", null);
+    }
+
     @Operation(summary = "Submit a bid for a package")
     @PostMapping("/bid-submissions")
     public ResponseData<BidSubmissionResponseDTO> submitBid(@RequestBody BidSubmissionRequestDTO request) {

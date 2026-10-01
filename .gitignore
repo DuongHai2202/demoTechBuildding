@@ -42,3 +42,9 @@ Backend/demoTechBuildding/HSNL_TechBuilder.pdf
 .DS_Store
 *.swp
 .env
+__pycache__/
+tmp/
+audit_vietnamese.py
+repair_vietnamese.py
+run.bat
+seed_data_expanded.sql
