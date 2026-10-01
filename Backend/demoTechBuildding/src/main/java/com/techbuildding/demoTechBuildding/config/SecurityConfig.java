@@ -122,6 +122,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/bidding-packages", "/api/v1/bidding-packages/**").hasAnyRole("ADMIN", "PM", "PARTNER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/bidding-packages").hasAnyRole("ADMIN", "PM")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/bidding-packages/**").hasAnyRole("ADMIN", "PM")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/bidding-packages/**").hasAnyRole("ADMIN", "PM")
 
                         // Material catalogue is readable by operational users;
                         // catalogue changes and approvals are PM-owned.

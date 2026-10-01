@@ -10,6 +10,7 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -93,6 +94,7 @@ export function ActionDialogProvider({ children }: { children: ReactNode }) {
   const [inputValue, setInputValue] = useState('');
   const resolverRef = useRef<((result: DialogResult) => void) | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   const finish = useCallback((result: DialogResult) => {
     const resolver = resolverRef.current;
@@ -134,17 +136,26 @@ export function ActionDialogProvider({ children }: { children: ReactNode }) {
     if (!dialog) return;
 
     const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
+    const modal = dialogRef.current;
+    modal?.showModal();
     document.body.style.overflow = 'hidden';
     const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 0);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') finish(dialog.kind === 'confirm' ? false : null);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        finish(dialog.kind === 'confirm' ? false : null);
+      }
     };
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
       window.clearTimeout(focusTimer);
+      modal?.close();
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     };
   }, [dialog, finish]);
 
@@ -157,14 +168,19 @@ export function ActionDialogProvider({ children }: { children: ReactNode }) {
   return (
     <ActionDialogContext.Provider value={{ confirm, prompt }}>
       {children}
-      {dialog && config && Icon && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm animate-in fade-in duration-150" role="presentation">
+      {dialog && config && Icon && createPortal(
+        <dialog
+          ref={dialogRef}
+          aria-labelledby="action-dialog-title"
+          aria-describedby="action-dialog-description"
+          onCancel={(event) => {
+            event.preventDefault();
+            finish(dialog.kind === 'confirm' ? false : null);
+          }}
+          className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto border-0 bg-transparent p-0 text-[var(--color-text-primary)] backdrop:bg-slate-950/55 backdrop:backdrop-blur-sm"
+        >
           <div
             className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl animate-in zoom-in-95 duration-150"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="action-dialog-title"
-            aria-describedby="action-dialog-description"
           >
             <div className="flex items-start gap-3 border-b border-[var(--color-border)] px-5 py-4">
               <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${config.iconClass}`}>
@@ -236,7 +252,8 @@ export function ActionDialogProvider({ children }: { children: ReactNode }) {
               </Button>
             </div>
           </div>
-        </div>
+        </dialog>,
+        document.body,
       )}
     </ActionDialogContext.Provider>
   );

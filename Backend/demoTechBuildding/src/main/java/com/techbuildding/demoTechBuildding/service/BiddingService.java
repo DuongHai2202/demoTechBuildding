@@ -13,6 +13,7 @@ public interface BiddingService {
     List<BiddingPackageResponseDTO> getAllPackages();
     BiddingPackageResponseDTO getPackageById(Integer id);
     BiddingPackageResponseDTO updatePackageStatus(Integer id, String status);
+    void deletePackage(Integer id);
     
     BidSubmissionResponseDTO submitBid(BidSubmissionRequestDTO request);
     List<BidSubmissionResponseDTO> getSubmissionsByPackage(Integer packageId);

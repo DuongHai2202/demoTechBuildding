@@ -36,6 +36,19 @@ export const useCreateTechnicalStandard = () => {
   });
 };
 
+export const useUpdateTechnicalStandard = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, request }: { id: number; request: TechnicalStandardRequest }) => {
+      const { data } = await api.put<ApiResponse<TechnicalStandard>>(`/technical-standards/${id}`, request);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['technical-standards'] });
+    },
+  });
+};
+
 export const useUploadTechnicalFile = () => {
   const queryClient = useQueryClient();
   return useMutation({

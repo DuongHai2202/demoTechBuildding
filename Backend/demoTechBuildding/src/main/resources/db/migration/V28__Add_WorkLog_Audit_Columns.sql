@@ -8,4 +8,5 @@ ADD COLUMN `notes` TEXT NULL;
 
 -- Add foreign key constraints for audit columns
 ALTER TABLE `tbl_work_logs`
-ADD CONSTRAINT `fk_worklogs_checked_by` FOREIGN KEY (`checked_by`) REFERENCES `tbl_users`
+ADD CONSTRAINT `fk_worklogs_checked_by` FOREIGN KEY (`checked_by`) REFERENCES `tbl_users`(`id`) ON DELETE SET NULL,
+ADD CONSTRAINT `fk_worklogs_approved_by` FOREIGN KEY (`approved_by`) REFERENCES `tbl_users`(`id`) ON DELETE SET NULL;

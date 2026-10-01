@@ -1,7 +1,10 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCreateTechnicalStandard } from '../api/technicalStandardApi';
+import { useCreateTechnicalStandard, useUpdateTechnicalStandard } from '../api/technicalStandardApi';
+import type { TechnicalStandard } from '../types/technicalStandard.types';
+import { getApiErrorMessage } from '../../../services/apiError';
+import { toast } from 'sonner';
 import { useProjects } from '../../projects/api/projectApi';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { optionalCode, optionalText, requiredText } from '../../../utils/validation';
@@ -18,23 +21,25 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 interface Props {
-  standard?: any;
+  standard?: TechnicalStandard | null;
   onClose: () => void;
 }
 
 export function TechnicalStandardForm({ standard, onClose }: Props) {
   const createMutation = useCreateTechnicalStandard();
+  const updateMutation = useUpdateTechnicalStandard();
+  const isPending = createMutation.isPending || updateMutation.isPending;
   const { data: projects } = useProjects();
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setError, clearErrors, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: standard ? {
       code: standard.code,
       name: standard.name,
-      description: standard.description,
-      category: standard.category,
-      version: standard.version,
-      projectId: standard.projectId,
+      description: standard.description ?? '',
+      category: schema.shape.category.safeParse(standard.category).data,
+      version: standard.version ?? '',
+      projectId: standard.projectId ?? null,
     } : {
       category: 'TCVN',
       version: '1.0'
@@ -42,9 +47,17 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
   });
 
   const onSubmit = (data: FormValues) => {
-    createMutation.mutate(data, {
-      onSuccess: () => onClose()
-    });
+    if (isPending) return;
+    clearErrors('root');
+    const callbacks = {
+      onSuccess: () => {
+        toast.success(standard ? 'Đã cập nhật tiêu chuẩn.' : 'Đã thêm tiêu chuẩn.');
+        onClose();
+      },
+      onError: (error: unknown) => setError('root.server', { message: getApiErrorMessage(error) }),
+    };
+    if (standard) updateMutation.mutate({ id: standard.id, request: data }, callbacks);
+    else createMutation.mutate(data, callbacks);
   };
 
   return (
@@ -62,7 +75,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-bold text-[var(--color-text-muted)]">Mã hiệu <span className="text-xs font-normal">(để trống để tự sinh)</span></label>
+              <label className="text-sm font-bold text-[var(--color-text-muted)]">Mã hiệu <span className="text-xs font-normal">{standard ? '(để trống để giữ mã cũ)' : '(để trống để tự sinh)'}</span></label>
               <input
                 {...register('code')}
                 className="w-full px-4 py-2.5 rounded-xl border border-[var(--color-border)] focus:ring-2 focus:ring-[var(--color-primary)] outline-none"
@@ -83,6 +96,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
                 <option value="IEC">IEC (Điện)</option>
                 <option value="INTERNAL">Tiêu chuẩn Nội bộ</option>
               </select>
+              {errors.category && <p className="text-xs text-red-500">{errors.category.message}</p>}
             </div>
           </div>
 
@@ -117,6 +131,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
+              {errors.projectId && <p className="text-xs text-red-500">{errors.projectId.message}</p>}
             </div>
           </div>
 
@@ -130,6 +145,7 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
             />
           </div>
 
+          {errors.root?.server && <p role="alert" className="text-sm text-red-500">{errors.root.server.message}</p>}
           <div className="pt-4 flex gap-3">
             <button
               type="button"
@@ -140,10 +156,10 @@ export function TechnicalStandardForm({ standard, onClose }: Props) {
             </button>
             <button
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={isPending}
               className="flex-1 px-6 py-3 rounded-xl bg-[var(--color-primary)] text-white font-bold hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition-all shadow-lg"
             >
-              {createMutation.isPending ? 'Đang lưu...' : (standard ? 'Cập nhật' : 'Lưu tiêu chuẩn')}
+              {isPending ? 'Đang lưu...' : (standard ? 'Cập nhật' : 'Lưu tiêu chuẩn')}
             </button>
           </div>
         </form>

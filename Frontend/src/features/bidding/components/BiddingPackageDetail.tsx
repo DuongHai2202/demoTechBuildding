@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { useBiddingPackage, useBidSubmissions, useUpdateBiddingStatus } from '../api/biddingApi';
+import { getApiErrorMessage } from '../../../services/apiError';
+import { useActionDialog } from '../../../components/ui/ActionDialog';
 import {
   ArrowRightIcon,
   BuildingOffice2Icon,
@@ -50,7 +54,13 @@ const WORKFLOW_STEPS = [
 
 const OPEN_STATUSES: BiddingStatus[] = ['PUBLISHED', 'OPEN', 'BIDDING', 'INVITING'];
 
-export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackageDetailProps) {
+export function BiddingPackageDetail({ biddingPackage: initialPackage, onClose }: BiddingPackageDetailProps) {
+  const { data: latestPackage } = useBiddingPackage(initialPackage.id);
+  const biddingPackage = latestPackage ?? initialPackage;
+  const { data: submissions, isError: submissionsError } = useBidSubmissions(biddingPackage.id);
+  const updateStatus = useUpdateBiddingStatus();
+  const { confirm } = useActionDialog();
+  const evaluationRef = useRef<HTMLElement>(null);
   const { data: project } = useProject(biddingPackage.projectId);
   const user = useAuthStore((state) => state.user);
   const canManageBidding = hasPermission(user, 'BIDDING_MANAGE');
@@ -60,6 +70,24 @@ export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackage
   const workflowIndex = getWorkflowIndex(biddingPackage.status);
   const canReceiveSubmissions = OPEN_STATUSES.includes(biddingPackage.status);
   const projectName = project?.name || `Dự án #${biddingPackage.projectId}`;
+  const nextStatus = workflowIndex === 0 ? 'PUBLISHED' : canReceiveSubmissions ? 'EVALUATING' : null;
+  const needsSubmissions = nextStatus === 'EVALUATING' && !submissions?.length;
+
+  const advanceWorkflow = async () => {
+    if (!canManageBidding || !nextStatus || needsSubmissions || updateStatus.isPending) return;
+    if (nextStatus === 'EVALUATING' && !await confirm({
+      title: 'Chuyển sang đánh giá',
+      description: 'Gói thầu sẽ ngừng nhận hồ sơ và chuyển sang so sánh, lựa chọn nhà thầu.',
+      confirmLabel: 'Bắt đầu đánh giá',
+    })) return;
+    updateStatus.mutate({ id: biddingPackage.id, status: nextStatus }, {
+      onSuccess: () => {
+        setShowSubmissionForm(false);
+        toast.success(nextStatus === 'PUBLISHED' ? 'Đã công bố gói thầu.' : 'Đã chuyển sang bước đánh giá.');
+      },
+      onError: (error) => toast.error(getApiErrorMessage(error)),
+    });
+  };
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -132,6 +160,26 @@ export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackage
                 );
               })}
             </div>
+            {canManageBidding && (nextStatus || biddingPackage.status === 'EVALUATING') && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-4">
+                <p className="text-sm text-[var(--color-text-muted)]" role="status">
+                  {biddingPackage.status === 'EVALUATING'
+                    ? 'Chọn nhà thầu trúng thầu trong bảng đánh giá để hoàn tất bước Kết quả.'
+                    : needsSubmissions
+                      ? submissionsError ? 'Không tải được hồ sơ. Vui lòng tải lại trang.' : !submissions ? 'Đang tải hồ sơ dự thầu...' : 'Thêm ít nhất một hồ sơ dự thầu trước khi chuyển sang đánh giá.'
+                      : nextStatus === 'PUBLISHED' ? 'Công bố gói thầu để bắt đầu nhận hồ sơ.' : `Đã nhận ${submissions?.length ?? 0} hồ sơ. Có thể chuyển sang đánh giá.`}
+                </p>
+                <button
+                  type="button"
+                  disabled={updateStatus.isPending || needsSubmissions}
+                  onClick={nextStatus ? advanceWorkflow : () => evaluationRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updateStatus.isPending ? 'Đang chuyển bước...' : nextStatus === 'PUBLISHED' ? 'Công bố & mời thầu' : nextStatus === 'EVALUATING' ? 'Chuyển sang đánh giá' : 'Đánh giá & chọn nhà thầu'}
+                  <ArrowRightIcon className="size-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -172,7 +220,7 @@ export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackage
             </InfoSection>
           </section>
 
-          <section className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-theme)]">
+          <section ref={evaluationRef} className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-card-theme)]">
             <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -208,8 +256,8 @@ export function BiddingPackageDetail({ biddingPackage, onClose }: BiddingPackage
                 packageId={biddingPackage.id}
                 budget={biddingPackage.budget}
                 criteria={biddingPackage.criteria}
-                onAddSubmission={() => setShowSubmissionForm(true)}
-                canManage={canManageBidding}
+                onAddSubmission={canReceiveSubmissions && canSubmitBid ? () => setShowSubmissionForm(true) : undefined}
+                canManage={canManageBidding && biddingPackage.status === 'EVALUATING'}
               />
             </div>
           </section>
